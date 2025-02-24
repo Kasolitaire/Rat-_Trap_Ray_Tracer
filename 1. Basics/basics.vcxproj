@@ -161,7 +161,8 @@
     <ClInclude Include="..\template\tmpl8math.h" />
     <ClInclude Include="Model.h" />
     <ClInclude Include="renderer.h" />
-    <ClInclude Include="TinyObj.h" />
+    <ClInclude Include="tiny_bvh.h" />
+    <ClInclude Include="tiny_obj_loader.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="..\template\LICENSE" />
