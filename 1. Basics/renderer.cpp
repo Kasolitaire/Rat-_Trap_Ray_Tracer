@@ -15,15 +15,53 @@ void Renderer::Init()
 // -----------------------------------------------------------
 float3 Renderer::Trace( Ray& ray )
 {
-	scene.FindNearest( ray );
-	if (ray.objIdx == -1) return 0; // or a fancy sky color
-	float3 I = ray.O + ray.t * ray.D;
-	float3 N = scene.GetNormal( ray.objIdx, I, ray.D );
-	float3 albedo = scene.GetAlbedo( ray.objIdx, I );
+
+
+	const float MAX_DISTANCE = 1000.0f; // Set this to the maximum distance you expect
+
+	tinybvh::Ray bvh_ray(ray.O, normalize(ray.D)); // Ensure ray direction is normalized
+
+	if (scene.model.m_bvh.Intersect(bvh_ray) && bvh_ray.hit.t > 0.0f) // Check if there is a hit
+	{
+		float3 intersection = ray.O + bvh_ray.hit.t * ray.D;
+		float l = length(intersection - ray.O); // Calculate distance to intersection
+
+		// Reverse the brightness: closer = brighter, farther = darker
+		float brightness = 1.0f - min(l / MAX_DISTANCE, 1.0f); // Clamp to [0, 1] range
+
+		// Calculate barycentric coordinates
+		float u = bvh_ray.hit.u;
+		float v = bvh_ray.hit.v;
+
+		float w = 1.0f - u - v;
+
+
+
+		uint32_t index = bvh_ray.hit.prim;
+		float3 normal1 = scene.model.m_vertices[index * 3].normal;
+		float3 normal2 = scene.model.m_vertices[index * 3 + 1].normal;
+		float3 normal3 = scene.model.m_vertices[index * 3 + 2].normal;
+		float3 smoothNormal = float3((w * normal1) + (u * normal2) + (v * normal3));
+
+
+		// Final color: make it grayscale based on the reversed brightness
+		//float3 finalColor = float3(brightness, brightness, brightness);
+		return (smoothNormal + 1) * 0.5f;
+	}
+
+	return float3(0, 0, 0); // Return black if no intersection
+
+
+
+	//scene.FindNearest( ray );
+	//if (ray.objIdx == -1) return 0; // or a fancy sky color
+	//float3 I = ray.O + ray.t * ray.D;
+	//float3 N = scene.GetNormal( ray.objIdx, I, ray.D );
+	//float3 albedo = scene.GetAlbedo( ray.objIdx, I );
 	/* visualize normal */ //return (N + 1) * 0.5f;
 	/* visualize distance */ // return 0.1f * float3( ray.t, ray.t, ray.t );
 	/* visualize albedo */ // return albedo;
-	return albedo;
+	//return albedo;
 }
 
 // -----------------------------------------------------------

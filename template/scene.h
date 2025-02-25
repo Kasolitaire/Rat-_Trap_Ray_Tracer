@@ -1,5 +1,5 @@
 #pragma once
-
+#include "Model.h"
 // -----------------------------------------------------------
 // scene.h
 // Simple test scene for ray tracing experiments. Goals:
@@ -759,5 +759,6 @@ public:
 	Cube cube;
 	Plane plane[6];
 	Torus torus;
+	Model model;
 };
 }

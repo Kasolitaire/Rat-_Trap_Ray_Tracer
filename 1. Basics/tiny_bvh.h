@@ -187,6 +187,19 @@ THE SOFTWARE.
 #endif
 #include <cstdint>
 
+
+
+namespace tinybvh
+{
+	using bvhint2 = Tmpl8::int2;
+	using bvhint3 = Tmpl8::int3;
+	using bvhuint2 = Tmpl8::uint2;
+	using bvhvec2 = Tmpl8::float2;
+	using bvhvec3 = Tmpl8::float3;
+	using bvhvec4 = Tmpl8::float4;
+}
+
+
 // aligned memory allocation
 // note: formally size needs to be a multiple of 'alignment'. See:
 // https://en.cppreference.com/w/c/memory/aligned_alloc
