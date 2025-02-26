@@ -1124,6 +1124,11 @@ class ALIGNED( 64 ) BLASInstance
 public:
 	BLASInstance() = default;
 	BLASInstance( uint32_t idx ) : blasIdx( idx ) {}
+	void UpdateTransform(const float* matrix) 
+	{
+		for (int index = 0; index < 16; index++) transform[index] = matrix[index];
+		InvertTransform();
+	};
 	float transform[16] = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1 }; // identity
 	float invTransform[16] = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1 }; // identity
 	bvhvec3 aabbMin = bvhvec3( BVH_FAR );

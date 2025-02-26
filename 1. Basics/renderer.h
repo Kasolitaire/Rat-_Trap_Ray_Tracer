@@ -1,5 +1,5 @@
 #pragma once
-
+#include "DemoScene.h"
 namespace Tmpl8
 {
 
@@ -22,7 +22,8 @@ public:
 	// data members
 	int2 mousePos;
 	float4* accumulator;
-	Scene scene;
+	//Scene scene;
+	DemoScene scene;
 	Camera camera;
 	bool animating = true;
 	float anim_time = 0;

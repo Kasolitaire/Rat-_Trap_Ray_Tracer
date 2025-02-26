@@ -16,18 +16,28 @@ void Renderer::Init()
 float3 Renderer::Trace( Ray& ray )
 {
 
-
 	const float MAX_DISTANCE = 1000.0f; // Set this to the maximum distance you expect
 
 	tinybvh::Ray bvh_ray(ray.O, normalize(ray.D)); // Ensure ray direction is normalized
+	scene.tlas.Intersect(bvh_ray) && bvh_ray.hit.t > 0.0f;
 
-	if (scene.model.m_bvh.Intersect(bvh_ray) && bvh_ray.hit.t > 0.0f) // Check if there is a hit
+
+	if (bvh_ray.hit.t < BVH_FAR) // Check if there is a hit
 	{
-		float3 intersection = ray.O + bvh_ray.hit.t * ray.D;
-		float l = length(intersection - ray.O); // Calculate distance to intersection
+		
+		uint32_t modelIndex = scene.instances[bvh_ray.hit.inst].blasIdx;
 
-		// Reverse the brightness: closer = brighter, farther = darker
-		float brightness = 1.0f - min(l / MAX_DISTANCE, 1.0f); // Clamp to [0, 1] range
+		if (modelIndex == 0) 
+		{
+			int x = 0;
+		}
+
+		if (modelIndex == 1)
+		{
+			int x = 1;
+		}
+
+		float3 intersection = ray.O + bvh_ray.hit.t * ray.D;
 
 		// Calculate barycentric coordinates
 		float u = bvh_ray.hit.u;
@@ -35,12 +45,10 @@ float3 Renderer::Trace( Ray& ray )
 
 		float w = 1.0f - u - v;
 
-
-
 		uint32_t index = bvh_ray.hit.prim;
-		float3 normal1 = scene.model.m_vertices[index * 3].normal;
-		float3 normal2 = scene.model.m_vertices[index * 3 + 1].normal;
-		float3 normal3 = scene.model.m_vertices[index * 3 + 2].normal;
+		float3 normal1 = scene.models[modelIndex]->m_vertices[index * 3].normal;
+		float3 normal2 = scene.models[modelIndex]->m_vertices[index * 3 + 1].normal;
+		float3 normal3 = scene.models[modelIndex]->m_vertices[index * 3 + 2].normal;
 		float3 smoothNormal = float3((w * normal1) + (u * normal2) + (v * normal3));
 
 
@@ -66,14 +74,20 @@ float3 Renderer::Trace( Ray& ray )
 
 // -----------------------------------------------------------
 // Main application tick function - Executed once per frame
-// -----------------------------------------------------------
+// -----------------------------------------------------------tyr 
 void Renderer::Tick( float deltaTime )
 {
 	// animation
-	if (animating) scene.SetTime( anim_time += deltaTime * 0.002f );
+	//if (animating) scene.SetTime( anim_time += deltaTime * 0.002f );
 	// pixel loop
 	Timer t;
 	// lines are executed as OpenMP parallel tasks (disabled in DEBUG)
+
+	if (true) // should have a check to see if dirty (meaning some change was made to the instances)
+	{
+		scene.RebuildTLAS();
+	}
+
 #pragma omp parallel for schedule(dynamic)
 	for (int y = 0; y < SCRHEIGHT; y++)
 	{
@@ -104,7 +118,7 @@ void Renderer::UI()
 	// animation toggle
 	ImGui::Checkbox( "Animate scene", &animating );
 	// ray query on mouse
-	Ray r = camera.GetPrimaryRay( (float)mousePos.x, (float)mousePos.y );
+	/*Ray r = camera.GetPrimaryRay( (float)mousePos.x, (float)mousePos.y );
 	scene.FindNearest( r );
-	ImGui::Text( "Object id: %i", r.objIdx );
+	ImGui::Text( "Object id: %i", r.objIdx );*/
 }

@@ -139,8 +139,10 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Create</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="..\template\tmpl8math.cpp" />
+    <ClCompile Include="DemoScene.cpp" />
     <ClCompile Include="Model.cpp" />
     <ClCompile Include="renderer.cpp" />
+    <ClCompile Include="RenderObject.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\lib\imgui\imconfig.h" />
@@ -159,9 +161,11 @@
     <ClInclude Include="..\template\scene.h" />
     <ClInclude Include="..\template\surface.h" />
     <ClInclude Include="..\template\tmpl8math.h" />
+    <ClInclude Include="DemoScene.h" />
     <ClInclude Include="Lights.h" />
     <ClInclude Include="Model.h" />
     <ClInclude Include="renderer.h" />
+    <ClInclude Include="RenderObject.h" />
     <ClInclude Include="tiny_bvh.h" />
   </ItemGroup>
   <ItemGroup>

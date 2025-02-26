@@ -36,6 +36,8 @@
       <Filter>template</Filter>
     </ClCompile>
     <ClCompile Include="Model.cpp" />
+    <ClCompile Include="DemoScene.cpp" />
+    <ClCompile Include="RenderObject.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\template\common.h">
@@ -90,6 +92,8 @@
     <ClInclude Include="Model.h" />
     <ClInclude Include="tiny_bvh.h" />
     <ClInclude Include="Lights.h" />
+    <ClInclude Include="DemoScene.h" />
+    <ClInclude Include="RenderObject.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="..\template\LICENSE">
