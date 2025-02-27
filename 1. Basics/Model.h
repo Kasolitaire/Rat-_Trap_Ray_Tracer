@@ -18,7 +18,7 @@ struct Vertex
 class Model
 {
 public :
-	Model(std::string path);
+	Model(std::string path, bool smoothNormals = false);
 	tinybvh::BVH m_bvh;
 public:
 	std::vector<Vertex> m_vertices;

@@ -38,6 +38,7 @@
     <ClCompile Include="Model.cpp" />
     <ClCompile Include="DemoScene.cpp" />
     <ClCompile Include="RenderObject.cpp" />
+    <ClCompile Include="Material.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\template\common.h">
@@ -94,6 +95,7 @@
     <ClInclude Include="Lights.h" />
     <ClInclude Include="DemoScene.h" />
     <ClInclude Include="RenderObject.h" />
+    <ClInclude Include="Material.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="..\template\LICENSE">

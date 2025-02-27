@@ -140,6 +140,7 @@
     </ClCompile>
     <ClCompile Include="..\template\tmpl8math.cpp" />
     <ClCompile Include="DemoScene.cpp" />
+    <ClCompile Include="Material.cpp" />
     <ClCompile Include="Model.cpp" />
     <ClCompile Include="renderer.cpp" />
     <ClCompile Include="RenderObject.cpp" />
@@ -163,6 +164,7 @@
     <ClInclude Include="..\template\tmpl8math.h" />
     <ClInclude Include="DemoScene.h" />
     <ClInclude Include="Lights.h" />
+    <ClInclude Include="Material.h" />
     <ClInclude Include="Model.h" />
     <ClInclude Include="renderer.h" />
     <ClInclude Include="RenderObject.h" />

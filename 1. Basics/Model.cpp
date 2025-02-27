@@ -3,14 +3,24 @@
 #define TINYBVH_IMPLEMENTATION
 #include "tiny_bvh.h"
 
-Model::Model(std::string path)
+Model::Model(std::string path, bool smoothNormals)
 {
 	std::vector<unsigned int> indcies;
 
-	//const char* path = "";
 	// read file via ASSIMP
 	Assimp::Importer importer;
-	const aiScene* scene = importer.ReadFile(path.c_str(), aiProcess_Triangulate | aiProcess_GenSmoothNormals | aiProcess_FlipUVs);
+	aiPostProcessSteps flags;
+
+	if (smoothNormals) 
+	{
+		flags = aiPostProcessSteps(aiProcess_Triangulate | aiProcess_DropNormals | aiProcess_GenSmoothNormals | aiProcess_FlipUVs);
+	}
+	else
+	{
+		flags = aiPostProcessSteps(aiProcess_Triangulate | aiProcess_GenSmoothNormals | aiProcess_FlipUVs);
+	}
+
+	const aiScene* scene = importer.ReadFile(path.c_str(), flags);
 	// check for errors
 	if (!scene || scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE || !scene->mRootNode) // if is Not Zero
 	{

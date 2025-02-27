@@ -83,10 +83,16 @@ void Renderer::Tick( float deltaTime )
 	Timer t;
 	// lines are executed as OpenMP parallel tasks (disabled in DEBUG)
 
-	if (true) // should have a check to see if dirty (meaning some change was made to the instances)
-	{
-		scene.RebuildTLAS();
-	}
+	RenderObject& monkey = scene.m_renderObjects["Monkey"];
+	float3 position = monkey.GetPosition();
+	position.x += 0.001f * deltaTime;
+	monkey.SetPosition(position);
+	float3 rotation = monkey.GetRotation ();
+	rotation.y += 0.001f * deltaTime;
+	monkey.SetRotation(rotation);
+
+
+	scene.Update();
 
 #pragma omp parallel for schedule(dynamic)
 	for (int y = 0; y < SCRHEIGHT; y++)
