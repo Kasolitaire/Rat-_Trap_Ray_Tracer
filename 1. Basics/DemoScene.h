@@ -3,6 +3,7 @@
 #include "RenderObject.h"   
 #include "Material.h"
 #include <unordered_map>
+#include "Lights.h"
 
 struct RenderData 
 {
@@ -40,28 +41,7 @@ public:
         CreateRenderObject("Monkey", "Suzanne");
         CreateRenderObject("pot", "Teapot");
 
-		// adding blas for every render object
-        //for (unsigned int index = 0; index < m_renderData.size(); index++)
-        //{
-        //    instances.push_back(tinybvh::BLASInstance(1));
-        //}
-
-        //if (!instances.empty() && !bvhList.empty()) { // Ensure valid inputs
-        //    std::cout << "Calling TLAS Build with "
-        //        << instances.size() << " instances and "
-        //        << bvhList.size() << " BLAS elements.\n";
-
-        //    tlas.Build(instances.data(),
-        //        static_cast<uint32_t>(instances.size()),
-        //        bvhList.data(),
-        //        static_cast<uint32_t>(bvhList.size()));
-
-        //    std::cout << "TLAS Build complete!" << std::endl;
-        //    std::cout << "TLAS usedNodes: " << tlas.usedNodes << std::endl;
-        //}
-        //else {
-        //    std::cerr << "Error: Instances or BLAS list is empty, skipping TLAS Build!" << std::endl;
-        //}
+		
 	};
 
     void RebuildTLAS() 
@@ -151,6 +131,10 @@ public:
     std::vector<Material> m_materials;
 	std::vector<RenderData> m_renderData;
     std::unordered_map<std::string, RenderObject> m_renderObjects;
+
+	//lights
+    PointLights m_pointLights;
+	DirectionalLights m_directionalLights;
 
 	bool isDirty = false;
 private:

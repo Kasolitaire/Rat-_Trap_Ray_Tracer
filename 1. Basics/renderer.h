@@ -10,7 +10,11 @@ public:
 	void Init();
 	float3 Trace( Ray& ray );
 	void Tick( float deltaTime );
+	void ComputePointLights();
+	void ComputeDirectionalLights();
+	void ComputeSpotLights();
 	void UI();
+	void ImGuiCreateObjectPopout(std::string objectName, bool open);
 	void Shutdown() { /* implement if you want to do things on shutdown */ }
 	// input handling
 	void MouseUp( int button ) { /* implement if you want to detect mouse button presses */ }

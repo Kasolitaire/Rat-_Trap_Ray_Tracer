@@ -7,6 +7,7 @@ struct PointLights
 	std::vector<float3> positions;
 	std::vector<float3> colors;
 	std::vector<float> intensities;
+
 	void CreatePointLight(float3 position, float3 color, float intensity)
 	{
 		positions.push_back(position);

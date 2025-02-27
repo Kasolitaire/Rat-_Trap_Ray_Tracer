@@ -27,16 +27,6 @@ float3 Renderer::Trace( Ray& ray )
 		
 		uint32_t modelIndex = scene.instances[bvh_ray.hit.inst].blasIdx;
 
-		if (modelIndex == 0) 
-		{
-			int x = 0;
-		}
-
-		if (modelIndex == 1)
-		{
-			int x = 1;
-		}
-
 		float3 intersection = ray.O + bvh_ray.hit.t * ray.D;
 
 		// Calculate barycentric coordinates
@@ -116,15 +106,141 @@ void Renderer::Tick( float deltaTime )
 	camera.HandleInput( deltaTime );
 }
 
+void Tmpl8::Renderer::ComputePointLights()
+{
+}
+
+void Tmpl8::Renderer::ComputeDirectionalLights()
+{
+}
+
+void Tmpl8::Renderer::ComputeSpotLights()
+{
+}
+
 // -----------------------------------------------------------
 // Update user interface (imgui)
 // -----------------------------------------------------------
 void Renderer::UI()
 {
 	// animation toggle
-	ImGui::Checkbox( "Animate scene", &animating );
+	//ImGui::Checkbox( "Animate scene", &animating );
 	// ray query on mouse
 	/*Ray r = camera.GetPrimaryRay( (float)mousePos.x, (float)mousePos.y );
 	scene.FindNearest( r );
 	ImGui::Text( "Object id: %i", r.objIdx );*/
+	static bool showHierarchy = true;
+	static bool showLights = true;
+
+
+	if (ImGui::BeginMainMenuBar()) {
+		if (ImGui::BeginMenu("View")) {
+			if (ImGui::MenuItem("Hierarchy", nullptr, showHierarchy)) showHierarchy = !showHierarchy;
+			if (ImGui::MenuItem("Lights", nullptr, showLights)) showLights = !showLights;
+			ImGui::EndMenu();
+		}
+		//ImGui::SameLine();
+		//ImGui::Dummy(ImVec2(ImGui::GetContentRegionAvail().x - 100.0f, 0.0f)); // Adjust 100.0f for space
+		//ImGui::Text("Your Text Here");
+		ImGui::EndMainMenuBar();
+	}
+
+	//ImGuiID dockspace_id = ImGui::GetID("MainDockSpace");
+
+	// Dock the Hierarchy window to the left
+	if (showHierarchy) {
+		//ImGui::SetNextWindowDockID(dockspace_id, ImGuiCond_FirstUseEver);
+		ImGui::Begin("Hierarchy", &showHierarchy, ImGuiWindowFlags_NoCollapse);
+
+		static std::unordered_map<std::string, bool> popoutWindowStates;
+
+		for (auto& pair : scene.m_renderObjects)
+		{
+			std::string name = pair.first;
+			RenderObject& renderObject = pair.second;
+
+			// Display a button for each render object
+			if (ImGui::Button(name.c_str()))
+			{
+				// Toggle the popout window state when the button is pressed
+				popoutWindowStates[name] = !popoutWindowStates[name];
+			}
+
+			// Check if the popout window for this render object should be open
+			if (popoutWindowStates[name])
+			{
+				// Create the popout window for the render object
+				if (ImGui::Begin(name.c_str(), &popoutWindowStates[name], ImGuiWindowFlags_AlwaysAutoResize))
+				{
+					// Popout window content
+					ImGui::Text("Render Object: %s", name.c_str());
+
+					ImGui::Text("Transform Controls");
+
+					float3 position = renderObject.GetPosition();
+					float3 rotation = renderObject.GetRotation();
+					float3 scale = renderObject.GetScale();
+
+					// Position input
+					if (ImGui::DragFloat3("Position", &position[0], 0.01f, -FLT_MAX, FLT_MAX)) {
+						// You can apply the change in position here
+						// For example, apply it to the object or store it for further use
+						renderObject.SetPosition(position);
+					}
+
+					// Rotation input (e.g., for Euler angles)
+					if (ImGui::DragFloat3("Rotation", &rotation[0], 0.01f, -FLT_MAX, FLT_MAX)) {
+						// You can apply the change in rotation here
+						renderObject.SetRotation(rotation);
+					}
+
+					// Scale input
+					if (ImGui::DragFloat3("Scale", &scale[0], 0.01f, -FLT_MAX, FLT_MAX)) {
+						// You can apply the change in scale here
+						renderObject.SetScale(scale);
+					}
+
+					ImGui::End();
+				}
+			}
+		}
+
+		// Button to trigger the pop-out window
+		
+
+
+		// Show the pop-out window
+		
+		
+		ImGui::End();
+	}
+
+	// Dock the Inspector window to the right (next to Hierarchy)
+	if (showLights) {
+		//ImGui::SetNextWindowDockID(dockspace_id, ImGuiCond_FirstUseEver);
+		ImGui::Begin("Scene Lighting", &showLights, ImGuiWindowFlags_NoCollapse);
+		ImGui::Text("Object Properties:");
+		ImGui::End();
+	}
+
+}
+
+void Tmpl8::Renderer::ImGuiCreateObjectPopout(std::string objectName, bool open)
+{
+	if (open)
+	{
+		// Create the pop-out window
+		ImGui::Begin(objectName.c_str(), &open, ImGuiWindowFlags_AlwaysAutoResize);
+
+		// Window content
+		ImGui::Text("This is a popout window!");
+
+		// Close button
+		if (ImGui::Button("Close"))
+		{
+			open = false;
+		}
+
+		ImGui::End();
+	}
 }
