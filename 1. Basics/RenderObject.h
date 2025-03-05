@@ -18,13 +18,42 @@ public:
 	};
 
 	float3 GetPosition() { return m_position; }
-	void SetPosition(float3 position) { m_position = position; isDirty = true; }
+	void SetPosition(float3 position) 
+	{ 
+		for (unsigned int index = 0; index < 3; index++) {
+			if (position[index] != m_position[index]) 
+			{
+				isDirty = true;
+				m_position = position;	
+			}
+		}
+	}
 
 	float3 GetRotation() { return m_rotation; }
-	void SetRotation(float3 rotation) { m_rotation = rotation; isDirty = true; }
+	void SetRotation(float3 rotation) 
+	{ 
+		for (unsigned int index = 0; index < 3; index++) {
+			if (rotation[index] != m_rotation[index])
+			{
+				isDirty = true;
+				m_rotation = rotation;
+			}
+		}
+		m_rotation = rotation;
+	}
 
 	float3 GetScale() { return m_scale; }
-	void SetScale(float3 scale) { m_scale = scale; isDirty = true; }
+	void SetScale(float3 scale) 
+	{
+		for (unsigned int index = 0; index < 3; index++) {
+			if (scale[index] != m_scale[index])
+			{
+				isDirty = true;
+				m_scale = scale;
+			}
+		}
+		m_scale = scale;
+	}
 
 	void MarkAsClean() { isDirty = false; }
 	bool IsDirty() { return isDirty; }

@@ -3,7 +3,7 @@
 #define TINYBVH_IMPLEMENTATION
 #include "tiny_bvh.h"
 
-Model::Model(std::string path, bool smoothNormals)
+Model::Model(std::string path, std::string directory, std::string name, bool smoothNormals) : m_name(name)
 {
 	std::vector<unsigned int> indcies;
 
@@ -36,6 +36,36 @@ Model::Model(std::string path, bool smoothNormals)
 		for (unsigned int faceIndex = 0; faceIndex < mesh->mNumFaces; faceIndex++)
 		{
 			aiFace face = mesh->mFaces[faceIndex];
+			Mesh meshData;
+
+			aiMaterial* material = scene->mMaterials[mesh->mMaterialIndex];
+
+			// Get textures from the material
+			for (unsigned int diffuseTextureIndex = 0; diffuseTextureIndex < material->GetTextureCount(aiTextureType_DIFFUSE); ++diffuseTextureIndex)
+			{
+				TextureData textureData;
+				aiString aitexturePath;
+
+				material->GetTexture(aiTextureType_DIFFUSE, diffuseTextureIndex, &aitexturePath);
+				std::cout << "Diffuse texture path: " << aitexturePath.C_Str() << std::endl;
+				std::string texturePath = aitexturePath.C_Str();
+
+				Surface texture = Surface((directory + "/" + texturePath).c_str());
+
+				textureData.dimensions.x = texture.width;
+				textureData.dimensions.y = texture.height;
+				textureData.path = texturePath;
+
+				meshData.textures.push_back(textureData);
+
+				// Create a deep copy of the pixel data
+				uint* texturePixelsCopy = new uint[texture.width * texture.height];
+				std::memcpy(texturePixelsCopy, texture.pixels, texture.width * texture.height * sizeof(uint));
+
+				// Store the copied pixel data in the map
+				m_textures.emplace(texturePath, texturePixelsCopy);
+			}
+
 			for (unsigned int index = 0; index < face.mNumIndices; index++)
 			{
 
@@ -68,8 +98,12 @@ Model::Model(std::string path, bool smoothNormals)
 					vertex.texCoords = float2(0.f);
 				}
 
+				vertex.meshIndex = m_meshes.size();
+
 				m_vertices.push_back(vertex);
 			}
+
+			m_meshes.push_back(meshData);
 		}
 	}
 

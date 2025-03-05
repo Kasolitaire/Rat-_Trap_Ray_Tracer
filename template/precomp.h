@@ -64,6 +64,8 @@ using namespace std;
 // namespaces
 using namespace Tmpl8;
 
+#define EPSILON 1e-4f
+
 #define NO_DOUBLE_PRECISION_SUPPORT
 #define TINYBVH_USE_CUSTOM_VECTOR_TYPES 
 namespace tinybvh

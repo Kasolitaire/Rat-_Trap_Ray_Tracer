@@ -10,9 +10,11 @@ public:
 	void Init();
 	float3 Trace( Ray& ray );
 	void Tick( float deltaTime );
-	void ComputePointLights();
-	void ComputeDirectionalLights();
+	float3 ComputePointLights(const float3 normal, const float3 intersection); // works
+	float3 ComputeDirectionalLights(const float3 normal, const float3 intersection); // works
 	void ComputeSpotLights();
+	float2 InterpolateUV(float2 uv0, float2 uv1, float2 uv2, float3 barycentricCoordinates);
+	float3 SampleTexture(uint32_t* texture, int texWidth, int texHeight, float2 uv, bool tile);
 	void UI();
 	void ImGuiCreateObjectPopout(std::string objectName, bool open);
 	void Shutdown() { /* implement if you want to do things on shutdown */ }

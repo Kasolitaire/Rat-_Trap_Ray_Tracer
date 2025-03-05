@@ -4,6 +4,9 @@
 #include "Material.h"
 #include <unordered_map>
 #include "Lights.h"
+#include <filesystem>
+namespace fs = std::filesystem;
+
 
 struct RenderData 
 {
@@ -35,13 +38,14 @@ public:
   //      }
 
 
-        LoadModel("Suzanne", true);
-        LoadModel("Teapot");
+        LoadModel("ilo_cube");
+        LoadModel("teapot");
 
-        CreateRenderObject("Monkey", "Suzanne");
-        CreateRenderObject("pot", "Teapot");
+        CreateRenderObject("Monkey", "ilo_cube");
+        CreateRenderObject("pot", "teapot");
 
-		
+		//m_pointLights.CreatePointLight(float3(0, 10, 0), float3(1, 1, 1), 100);
+        m_directionalLights.CreateDirectionalLight(float3(0, -10.f, 0), float3(1, 1, 1), 10);
 	};
 
     void RebuildTLAS() 
@@ -72,16 +76,69 @@ public:
 
 		if (isDirty)
 		{
-			RebuildTLAS();
+			RebuildTLAS ();
 		}
     };
 
-	Model* LoadModel(std::string name, bool smoothNormals = false) // only loads obj files
+	void LoadModel(std::string name, bool smoothNormals = false) // only loads obj files
 	{
 
-		std::string path = "../assets/" + name + ".obj";
+		//std::string path =  + name + ".obj";
 
-        Model* model = new Model(path, smoothNormals);
+
+        const std::string directory = "../assets/";
+        std::vector<fs::path> filePaths;
+        std::string extension = ".obj";
+        const fs::path& fsDirectory = directory;
+        if (fs::exists(fsDirectory) && fs::is_directory(fsDirectory))
+        {
+            auto iterator = fs::recursive_directory_iterator(fsDirectory);
+
+            for (const auto& entry : iterator)
+            {
+                if (fs::is_regular_file(entry) && entry.path().extension() == extension)
+                {
+                    filePaths.push_back(entry.path());
+                }
+            }
+        }
+        else
+        {
+            std::cerr << "ModelManager: Directory does not exist or is not a directory.\n";
+            assert(0);
+        }
+
+        Model* model = nullptr;
+
+        for (auto path : filePaths)
+        {
+            std::string pathString = path.string();
+            char target = '\\';
+            std::string replacement = "/";
+
+            size_t pos = pathString.find(target);
+            while (pos != std::string::npos)
+            {
+                pathString.replace(pos, 1, replacement);
+                pos = pathString.find(target, pos + 1);
+            }
+
+            std::string objectName = path.filename().replace_extension().string();
+            std::string fullDirectory = path.remove_filename().string();
+            fullDirectory.erase(fullDirectory.size() - 1);
+
+            if (objectName == name)
+            {
+                 model = new Model(pathString, fullDirectory, objectName ,smoothNormals);
+            }
+        }
+
+        if (model == nullptr) 
+        {
+            std::cout << "Model doesn't exist: " << name << std::endl;
+            assert(0);
+        } 
+
 
 		unsigned int modelIndex = models.size();
 
@@ -104,7 +161,12 @@ public:
 
 	void CreateRenderObject(std::string objectName, std::string modelName, unsigned int materialIndex = 0) // should model index as parameter and model* as parameter
 	{
-        unsigned int modelIndex = m_modelNameToIndexMap[modelName];
+        if (m_modelNameToIndexMap.find(modelName) == m_modelNameToIndexMap.end()) 
+        {
+            assert(0);  // Key doesn't exist
+        }
+
+        unsigned int modelIndex = m_modelNameToIndexMap.at(modelName);
         unsigned int instanceIndex = instances.size();
 		Model* model = models[modelIndex];
 
