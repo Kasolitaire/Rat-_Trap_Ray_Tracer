@@ -1,4 +1,5 @@
 #include "precomp.h"
+#include "../lib/stb_image.h"
 
 // -----------------------------------------------------------
 // Initialize the renderer
@@ -8,6 +9,12 @@ void Renderer::Init()
 	// create fp32 rgb pixel buffer to render to
 	accumulator = (float4*)MALLOC64( SCRWIDTH * SCRHEIGHT * 16 );
 	memset( accumulator, 0, SCRWIDTH * SCRHEIGHT * 16 );
+
+	// load HDR sky
+	 // load HDR sky
+	int bpp = 0;
+	skyPixels = stbi_loadf("../assets/sky_19.hdr", &skyWidth, &skyHeight, &skyBpp, 0);
+	for (int i = 0; i < skyWidth * skyHeight * 3; i++) skyPixels[i] = sqrtf(skyPixels[i]);
 }
 
 // -----------------------------------------------------------
@@ -59,15 +66,31 @@ float3 Renderer::Trace( Ray& ray )
 		Vertex vertex2 = scene.models[modelIndex]->m_vertices[index * 3 + 1];
 		Vertex vertex3 = scene.models[modelIndex]->m_vertices[index * 3 + 2];
 
-		uint* texture = nullptr;
-		float2 dimensions;
+		uint* diffuseTexture = nullptr;
+		float2 diffuseDimensions;
+
+		uint* normalTexture = nullptr;
+		float2 normalDimensions;
 
 		if (model.m_textures.size()) 
 		{
-			TextureData& textureData = model.m_meshes[vertex1.meshIndex].textures[0];
-			std::string textureKey = textureData.path;
-			texture = model.m_textures[textureKey];
-			dimensions = textureData.dimensions;
+			for (TextureData& textureData : model.m_meshes[vertex1.meshIndex].textures) 
+			{
+				std::string textureKey = textureData.path;
+				TextureType type = textureData.type;
+
+				if (type == TextureType::Diffuse)
+				{
+					diffuseTexture = model.m_textures[textureKey];
+					diffuseDimensions = textureData.dimensions;
+				}
+
+				if (type == TextureType::Normal)
+				{
+					//normalTexture
+				}
+			}
+
 		}
 
 		std::string name = model.m_name;
@@ -85,18 +108,29 @@ float3 Renderer::Trace( Ray& ray )
 
 		float3 albedo = float3(1.f);
 
-		if (texture) 
+		if (diffuseTexture)
 		{
-			albedo = SampleTexture(texture, dimensions.x, dimensions.y, interpolatedUVCoords, true);
+			albedo = SampleTexture(diffuseTexture, diffuseDimensions.x, diffuseDimensions.y, interpolatedUVCoords, true);
 		}
 		//return albedo;
 		//return (smoothNormal + 1) * 0.5f;
 		return finalColor * albedo;
 	}
+	else
+	{
+		float u = (atan2f(ray.D.z, ray.D.x) * INV2PI + 0.5f) * skyWidth;
+		float v = acosf(ray.D.y) * INVPI * skyHeight;
+
+		int uIdx = std::clamp(static_cast<int>(u), 0, skyWidth - 1);
+		int vIdx = std::clamp(static_cast<int>(v), 0, skyHeight - 1);
+
+		int skyIdx = uIdx + vIdx * skyWidth;
+
+		return 0.65f * float3(skyPixels[skyIdx * 3], skyPixels[skyIdx * 3 + 1], skyPixels[skyIdx * 3 + 2]);
+	}
 
 	return finalColor; // Return black if no intersection
-
-
+		
 
 	//scene.FindNearest( ray );
 	//if (ray.objIdx == -1) return 0; // or a fancy sky color

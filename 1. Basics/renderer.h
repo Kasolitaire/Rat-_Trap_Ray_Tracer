@@ -33,6 +33,11 @@ public:
 	Camera camera;
 	bool animating = true;
 	float anim_time = 0;
+
+	float* skyPixels = nullptr;
+	int skyWidth = 0;
+	int skyHeight = 0;
+	int skyBpp = 0;
 };
 
 } // namespace Tmpl8

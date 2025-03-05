@@ -9,6 +9,12 @@
 #include <iostream>
 #include <unordered_map>
 
+enum class TextureType 
+{
+	Diffuse,
+	Normal
+};
+
 struct Vertex 
 {
 	float4 position;
@@ -21,7 +27,7 @@ struct Vertex
 struct TextureData
 {
 	//unsigned int id;
-	std::string type;
+	TextureType type;
 	std::string path;
 	int2 dimensions;
 };
@@ -45,6 +51,6 @@ public:
 	std::string m_name;
 
 private:
-
+	void LoadTextureType(aiTextureType aiTextureType, aiMaterial* material, std::string directory, Mesh& meshData);
 };
 

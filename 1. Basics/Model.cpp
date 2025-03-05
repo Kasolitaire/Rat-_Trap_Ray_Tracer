@@ -36,45 +36,10 @@ Model::Model(std::string path, std::string directory, std::string name, bool smo
 
 		aiMaterial* material = scene->mMaterials[mesh->mMaterialIndex];
 
-		// Get textures from the material
-		unsigned int diffuseTextureCount = material->GetTextureCount(aiTextureType_DIFFUSE);
-		for (unsigned int diffuseTextureIndex = 0; diffuseTextureIndex < diffuseTextureCount; ++diffuseTextureIndex)
-		{
-			TextureData textureData;
-			aiString aitexturePath;
+		LoadTextureType(aiTextureType_DIFFUSE, material, directory, meshData);
+		LoadTextureType(aiTextureType_HEIGHT, material, directory, meshData);
 
-			material->GetTexture(aiTextureType_DIFFUSE, diffuseTextureIndex, &aitexturePath);
-			std::cout << "Diffuse texture path: " << aitexturePath.C_Str() << std::endl;
-			std::string texturePath = aitexturePath.C_Str();
-
-			if (!m_textures.count(texturePath))
-			{
-				Surface texture = Surface((directory + "/" + texturePath).c_str());
-
-				textureData.dimensions.x = texture.width;
-				textureData.dimensions.y = texture.height;
-				textureData.path = texturePath;
-
-				meshData.textures.push_back(textureData);
-
-				// Create a deep copy of the pixel data
-				uint* texturePixelsCopy = new uint[texture.width * texture.height];
-				std::memcpy(texturePixelsCopy, texture.pixels, texture.width * texture.height * sizeof(uint));
-
-				// Store the copied pixel data in the map
-				m_textures.emplace(texturePath, texturePixelsCopy);
-			}
-			else
-			{
-				Surface texture = Surface((directory + "/" + texturePath).c_str());
-
-				textureData.dimensions.x = texture.width;
-				textureData.dimensions.y = texture.height;
-				textureData.path = texturePath;
-
-				meshData.textures.push_back(textureData);
-			}
-		}
+		
 
 		for (unsigned int faceIndex = 0; faceIndex < mesh->mNumFaces; faceIndex++)
 		{
@@ -122,4 +87,62 @@ Model::Model(std::string path, std::string directory, std::string name, bool smo
 	}
 
 	m_bvh.Build(tinybvh::bvhvec4slice(reinterpret_cast<float4*>(&m_vertices[0]), m_vertices.size(), sizeof(Vertex)));
+}
+
+void Model::LoadTextureType(aiTextureType aiTextureType, aiMaterial* material, std::string directory, Mesh& meshData)
+{
+	unsigned int normalTextureCount = material->GetTextureCount(aiTextureType);
+	for (unsigned int normalTextureIndex = 0; normalTextureIndex < normalTextureCount; normalTextureIndex++)
+	{
+		TextureData textureData;
+		aiString aitexturePath;
+
+		material->GetTexture(aiTextureType, normalTextureIndex, &aitexturePath);
+		std::string texturePath = aitexturePath.C_Str();
+		TextureType textureType;
+
+		switch (aiTextureType)
+		{
+		case aiTextureType_DIFFUSE:
+			textureType = TextureType::Diffuse;
+			std::cout << "Diffuse texture path: " << aitexturePath.C_Str() << std::endl;
+			break;
+		case aiTextureType_HEIGHT:
+			textureType = TextureType::Normal;
+			std::cout << "Normal texture path: " << aitexturePath.C_Str() << std::endl;
+			break;
+		default:
+			break;
+		}
+
+		if (!m_textures.count(texturePath))
+		{
+			Surface texture = Surface((directory + "/" + texturePath).c_str());
+
+			textureData.dimensions.x = texture.width;
+			textureData.dimensions.y = texture.height;
+			textureData.path = texturePath;
+			textureData.type = textureType;
+
+			meshData.textures.push_back(textureData);
+
+			// Create a deep copy of the pixel data
+			uint* texturePixelsCopy = new uint[texture.width * texture.height];
+			std::memcpy(texturePixelsCopy, texture.pixels, texture.width * texture.height * sizeof(uint));
+
+			// Store the copied pixel data in the map
+			m_textures.emplace(texturePath, texturePixelsCopy);
+		}
+		else
+		{
+			Surface texture = Surface((directory + "/" + texturePath).c_str());
+
+			textureData.dimensions.x = texture.width;
+			textureData.dimensions.y = texture.height;
+			textureData.path = texturePath;
+			textureData.type = textureType;
+
+			meshData.textures.push_back(textureData);
+		}
+	}
 }
