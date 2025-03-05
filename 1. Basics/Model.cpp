@@ -32,24 +32,23 @@ Model::Model(std::string path, std::string directory, std::string name, bool smo
 	for (unsigned int index = 0; index < scene->mNumMeshes; index++)
 	{
 		aiMesh* mesh = scene->mMeshes[index];
+		Mesh meshData;
 
-		for (unsigned int faceIndex = 0; faceIndex < mesh->mNumFaces; faceIndex++)
+		aiMaterial* material = scene->mMaterials[mesh->mMaterialIndex];
+
+		// Get textures from the material
+		unsigned int diffuseTextureCount = material->GetTextureCount(aiTextureType_DIFFUSE);
+		for (unsigned int diffuseTextureIndex = 0; diffuseTextureIndex < diffuseTextureCount; ++diffuseTextureIndex)
 		{
-			aiFace face = mesh->mFaces[faceIndex];
-			Mesh meshData;
+			TextureData textureData;
+			aiString aitexturePath;
 
-			aiMaterial* material = scene->mMaterials[mesh->mMaterialIndex];
+			material->GetTexture(aiTextureType_DIFFUSE, diffuseTextureIndex, &aitexturePath);
+			std::cout << "Diffuse texture path: " << aitexturePath.C_Str() << std::endl;
+			std::string texturePath = aitexturePath.C_Str();
 
-			// Get textures from the material
-			for (unsigned int diffuseTextureIndex = 0; diffuseTextureIndex < material->GetTextureCount(aiTextureType_DIFFUSE); ++diffuseTextureIndex)
+			if (!m_textures.count(texturePath))
 			{
-				TextureData textureData;
-				aiString aitexturePath;
-
-				material->GetTexture(aiTextureType_DIFFUSE, diffuseTextureIndex, &aitexturePath);
-				std::cout << "Diffuse texture path: " << aitexturePath.C_Str() << std::endl;
-				std::string texturePath = aitexturePath.C_Str();
-
 				Surface texture = Surface((directory + "/" + texturePath).c_str());
 
 				textureData.dimensions.x = texture.width;
@@ -65,6 +64,21 @@ Model::Model(std::string path, std::string directory, std::string name, bool smo
 				// Store the copied pixel data in the map
 				m_textures.emplace(texturePath, texturePixelsCopy);
 			}
+			else
+			{
+				Surface texture = Surface((directory + "/" + texturePath).c_str());
+
+				textureData.dimensions.x = texture.width;
+				textureData.dimensions.y = texture.height;
+				textureData.path = texturePath;
+
+				meshData.textures.push_back(textureData);
+			}
+		}
+
+		for (unsigned int faceIndex = 0; faceIndex < mesh->mNumFaces; faceIndex++)
+		{
+			aiFace face = mesh->mFaces[faceIndex];
 
 			for (unsigned int index = 0; index < face.mNumIndices; index++)
 			{

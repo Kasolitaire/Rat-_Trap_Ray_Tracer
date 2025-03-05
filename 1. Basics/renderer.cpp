@@ -161,13 +161,10 @@ float3 Tmpl8::Renderer::ComputePointLights(const float3 normal, const float3 int
 
 		float3 newOrigin = intersection + normal * EPSILON;
 		tinybvh::Ray shadowRay(newOrigin, lightDirection, distance);
-		//if (scene.tlas.IsOccludedTLAS(shadowRay))
+		if (!scene.tlas.IsOccludedTLAS(shadowRay))
 		{
 			finalColor += scene.m_pointLights.colors[index] * scene.m_pointLights.intensities[index] * (1 / (distance * distance)) * cosa;
 		}
-
-		// add condition
-		/*data.m_shadowRay = shadowRay;*/
 
 		return finalColor;
 	}
@@ -189,7 +186,6 @@ float3 Tmpl8::Renderer::ComputeDirectionalLights(const float3 normal, const floa
 	}
 
 	return finalColor;
-
 }
 
 void Tmpl8::Renderer::ComputeSpotLights()

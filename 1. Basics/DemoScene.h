@@ -5,6 +5,7 @@
 #include <unordered_map>
 #include "Lights.h"
 #include <filesystem>
+#include <unordered_set>
 namespace fs = std::filesystem;
 
 
@@ -40,12 +41,16 @@ public:
 
         LoadModel("ilo_cube");
         LoadModel("teapot");
+        LoadModel("Sponza");
 
         CreateRenderObject("Monkey", "ilo_cube");
         CreateRenderObject("pot", "teapot");
+        CreateRenderObject("sponza", "Sponza");
+        RenderObject& sponza = m_renderObjects.at("sponza");
+        sponza.SetScale(float3(0.03f, 0.03f, 0.03f));
 
-		//m_pointLights.CreatePointLight(float3(0, 10, 0), float3(1, 1, 1), 100);
-        m_directionalLights.CreateDirectionalLight(float3(0, -10.f, 0), float3(1, 1, 1), 10);
+		m_pointLights.CreatePointLight(float3(0, 10, 0), float3(1, 1, 1), 10);
+        //m_directionalLights.CreateDirectionalLight(float3(0, -10.f, 0), float3(1, 1, 1), 10);
 	};
 
     void RebuildTLAS() 
@@ -88,17 +93,22 @@ public:
 
         const std::string directory = "../assets/";
         std::vector<fs::path> filePaths;
-        std::string extension = ".obj";
-        const fs::path& fsDirectory = directory;
+
+        // Set of valid extensions
+        const std::unordered_set<std::string> validExtensions = { ".obj", ".gltf", ".glb", ".fbx" };
+
+        const fs::path fsDirectory = directory;
         if (fs::exists(fsDirectory) && fs::is_directory(fsDirectory))
         {
-            auto iterator = fs::recursive_directory_iterator(fsDirectory);
-
-            for (const auto& entry : iterator)
+            for (const auto& entry : fs::recursive_directory_iterator(fsDirectory))
             {
-                if (fs::is_regular_file(entry) && entry.path().extension() == extension)
+                if (fs::is_regular_file(entry))
                 {
-                    filePaths.push_back(entry.path());
+                    std::string ext = entry.path().extension().string();
+                    if (validExtensions.find(ext) != validExtensions.end())
+                    {
+                        filePaths.push_back(entry.path());
+                    }
                 }
             }
         }
