@@ -20,6 +20,8 @@ struct Vertex
 	float4 position;
 	float3 normal;
 	float2 texCoords;
+	float3 tangent;
+	float3 bitangent;
 	unsigned int meshIndex;
 };
 

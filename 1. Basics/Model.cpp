@@ -13,11 +13,11 @@ Model::Model(std::string path, std::string directory, std::string name, bool smo
 
 	if (smoothNormals) 
 	{
-		flags = aiPostProcessSteps(aiProcess_Triangulate | aiProcess_DropNormals | aiProcess_GenSmoothNormals | aiProcess_FlipUVs);
+		flags = aiPostProcessSteps(aiProcess_Triangulate | aiProcess_DropNormals | aiProcess_GenSmoothNormals | aiProcess_FlipUVs | aiProcess_CalcTangentSpace);
 	}
 	else
 	{
-		flags = aiPostProcessSteps(aiProcess_Triangulate | aiProcess_GenSmoothNormals | aiProcess_FlipUVs);
+		flags = aiPostProcessSteps(aiProcess_Triangulate | aiProcess_GenSmoothNormals | aiProcess_FlipUVs | aiProcess_CalcTangentSpace);
 	}
 
 	const aiScene* scene = importer.ReadFile(path.c_str(), flags);
@@ -57,7 +57,8 @@ Model::Model(std::string path, std::string directory, std::string name, bool smo
 				vertex.position.z = mesh->mVertices[currentIndice].z;
 
 
-				if (mesh->HasNormals()) {
+				if (mesh->HasNormals()) 
+				{
 					vertex.normal.x = mesh->mNormals[currentIndice].x;
 					vertex.normal.y = mesh->mNormals[currentIndice].y;
 					vertex.normal.z = mesh->mNormals[currentIndice].z;
@@ -75,6 +76,22 @@ Model::Model(std::string path, std::string directory, std::string name, bool smo
 				else
 				{
 					vertex.texCoords = float2(0.f);
+				}
+
+				if (mesh->HasTangentsAndBitangents()) 
+				{
+					vertex.tangent.x = mesh->mTangents[currentIndice].x;
+					vertex.tangent.y = mesh->mTangents[currentIndice].y;
+					vertex.tangent.z = mesh->mTangents[currentIndice].z;
+
+					vertex.bitangent.x = mesh->mBitangents[currentIndice].x;
+					vertex.bitangent.y = mesh->mBitangents[currentIndice].y;
+					vertex.bitangent.z = mesh->mBitangents[currentIndice].z;
+				}
+				else 
+				{
+					vertex.tangent = float3(0);
+					vertex.bitangent = float3(0);
 				}
 
 				vertex.meshIndex = m_meshes.size();

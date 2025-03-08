@@ -40,11 +40,11 @@ public:
 
 
         LoadModel("ilo_cube");
-        LoadModel("teapot");
+        //LoadModel("teapot");
         LoadModel("Sponza");
 
         CreateRenderObject("Monkey", "ilo_cube");
-        CreateRenderObject("pot", "teapot");
+       // CreateRenderObject("pot", "teapot");
         CreateRenderObject("sponza", "Sponza");
         RenderObject& sponza = m_renderObjects.at("sponza");
         sponza.SetScale(float3(0.03f, 0.03f, 0.03f));

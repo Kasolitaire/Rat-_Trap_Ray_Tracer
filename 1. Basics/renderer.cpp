@@ -4,6 +4,8 @@
 // -----------------------------------------------------------
 // Initialize the renderer
 // -----------------------------------------------------------
+static bool enableNormalMaps = true;
+
 void Renderer::Init()
 {
 	// create fp32 rgb pixel buffer to render to
@@ -48,29 +50,42 @@ float3 Renderer::Trace( Ray& ray )
 		float w = 1.0f - u - v;
 
 		uint32_t index = bvh_ray.hit.prim;
-		float3 normal1 = scene.models[modelIndex]->m_vertices[index * 3].normal;
-		float3 normal2 = scene.models[modelIndex]->m_vertices[index * 3 + 1].normal;
-		float3 normal3 = scene.models[modelIndex]->m_vertices[index * 3 + 2].normal;
-
-		float3 smoothNormal = (w * normal1) + (u * normal2) + (v * normal3);
-
-		// Transform normal correctly
-		smoothNormal = (float3(inverseMatrix.Transposed() * float4(smoothNormal, 0.0f)));
-
-
-		/*float2 position1 = float2(scene.models[modelIndex]->m_vertices[index * 3].texCoords);
-		float2 position2 = float2(scene.models[modelIndex]->m_vertices[index * 3 + 1].position);
-		float2 position3 = float2(scene.models[modelIndex]->m_vertices[index * 3 + 2].position);*/
 
 		Vertex vertex1 = scene.models[modelIndex]->m_vertices[index * 3];
 		Vertex vertex2 = scene.models[modelIndex]->m_vertices[index * 3 + 1];
 		Vertex vertex3 = scene.models[modelIndex]->m_vertices[index * 3 + 2];
 
-		uint* diffuseTexture = nullptr;
-		float2 diffuseDimensions;
+		float3 normal1 = vertex1.normal;
+		float3 normal2 = vertex2.normal;
+		float3 normal3 = vertex3.normal;
+
+		float3 interpolatedNormal = (w * normal1) + (u * normal2) + (v * normal3);
+
+
+		//Interpolation can cause slight skewing, so re - orthogonalizing the tangent space helps :
+
+		//cpp
+		//	Copy
+		//	Edit
+		//	T = normalize(T - dot(T, N) * N); // Make T orthogonal to N
+		//B = cross(N, T);                  // Recompute B to ensure orthogonality
+
+		// Transform normal correctly
+		interpolatedNormal = (float3(inverseMatrix.Transposed() * float4(interpolatedNormal, 0.0f)));
+
+
+		
+
+		//mat4 TBN =  
+		/*float2 position1 = float2(scene.models[modelIndex]->m_vertices[index * 3].texCoords);
+		float2 position2 = float2(scene.models[modelIndex]->m_vertices[index * 3 + 1].position);
+		float2 position3 = float2(scene.models[modelIndex]->m_vertices[index * 3 + 2].position);*/
 
 		uint* normalTexture = nullptr;
 		float2 normalDimensions;
+
+		float2 interpolatedUVCoords = InterpolateUV(vertex1.texCoords, vertex2.texCoords, vertex3.texCoords, float3(w, u, v));
+		float3 albedo = float3(1.f);
 
 		if (model.m_textures.size()) 
 		{
@@ -81,13 +96,29 @@ float3 Renderer::Trace( Ray& ray )
 
 				if (type == TextureType::Diffuse)
 				{
-					diffuseTexture = model.m_textures[textureKey];
-					diffuseDimensions = textureData.dimensions;
+					uint* diffuseTexture = model.m_textures[textureKey];
+					albedo = SampleTexture(diffuseTexture, textureData.dimensions.x, textureData.dimensions.y, interpolatedUVCoords, true);
 				}
 
-				if (type == TextureType::Normal)
+				if (type == TextureType::Normal && enableNormalMaps)
 				{
-					//normalTexture
+					float3 T = normalize(float3(vertex1.tangent * w + vertex2.tangent * u + vertex3.tangent * v));
+					float3 B = normalize(float3(vertex1.bitangent * w + vertex2.bitangent * u + vertex3.bitangent * v));
+					T = normalize(T - dot(T, interpolatedNormal) * interpolatedNormal); // Make T orthogonal to N
+					B = cross(interpolatedNormal, T);
+					B *= -1.0f;
+
+					mat4 TBN;
+					TBN[0] = T.x;  TBN[1] = B.x;  TBN[2] = interpolatedNormal.x;  TBN[3] = 0.f;
+					TBN[4] = T.y;  TBN[5] = B.y;  TBN[6] = interpolatedNormal.y;  TBN[7] = 0.f;
+					TBN[8] = T.z;  TBN[9] = B.z;  TBN[10] = interpolatedNormal.z;  TBN[11] = 0.f;
+					TBN[12] = 0.f;  TBN[13] = 0.f;  TBN[14] = 0.f;                  TBN[15] = 1.f; // Identity row
+
+					uint* normalTexture = model.m_textures[textureKey];
+					float3 normalSample = SampleTexture(normalTexture, textureData.dimensions.x, textureData.dimensions.y, interpolatedUVCoords, true);
+					float3 N_tangent = normalSample * 2.0f - 1.0f; // Convert from [0,1] to [-1,1]
+					interpolatedNormal = normalize(TBN * float4(normalSample, 0.f));
+					//float3 sampledNormal = SampleTexture
 				}
 			}
 
@@ -95,26 +126,20 @@ float3 Renderer::Trace( Ray& ray )
 
 		std::string name = model.m_name;
 
-		float2 interpolatedUVCoords = InterpolateUV(vertex1.texCoords, vertex2.texCoords, vertex3.texCoords, float3(w, u, v));
 		if (scene.m_pointLights.enabled && scene.m_pointLights.positions.size()) 
 		{
-			finalColor += ComputePointLights(smoothNormal, intersection);
+			finalColor += ComputePointLights(interpolatedNormal, intersection);
 		}
 
 		if (scene.m_directionalLights.enabled && scene.m_directionalLights.directions.size())
 		{
-			finalColor += ComputeDirectionalLights(smoothNormal, intersection);
+			finalColor += ComputeDirectionalLights(interpolatedNormal, intersection);
 		}
 
-		float3 albedo = float3(1.f);
 
-		if (diffuseTexture)
-		{
-			albedo = SampleTexture(diffuseTexture, diffuseDimensions.x, diffuseDimensions.y, interpolatedUVCoords, true);
-		}
 		//return albedo;
-		//return (smoothNormal + 1) * 0.5f;
-		return finalColor * albedo;
+		return (interpolatedNormal + 1) * 0.5f;
+		//return finalColor * albedo;
 	}
 	else
 	{
@@ -128,9 +153,6 @@ float3 Renderer::Trace( Ray& ray )
 
 		return 0.65f * float3(skyPixels[skyIdx * 3], skyPixels[skyIdx * 3 + 1], skyPixels[skyIdx * 3 + 2]);
 	}
-
-	return finalColor; // Return black if no intersection
-		
 
 	//scene.FindNearest( ray );
 	//if (ray.objIdx == -1) return 0; // or a fancy sky color
@@ -182,9 +204,10 @@ void Renderer::Tick( float deltaTime )
 
 float3 Tmpl8::Renderer::ComputePointLights(const float3 normal, const float3 intersection)
 {
+	float3 finalColor = float3(0);
+
 	for (unsigned int index = 0; index < scene.m_pointLights.positions.size(); index++)
 	{
-		float3 finalColor = float3(0, 0, 0);
 
 		float3 lightPosition = scene.m_pointLights.positions[index];
 		float3 lightVector = lightPosition - intersection;
@@ -200,8 +223,9 @@ float3 Tmpl8::Renderer::ComputePointLights(const float3 normal, const float3 int
 			finalColor += scene.m_pointLights.colors[index] * scene.m_pointLights.intensities[index] * (1 / (distance * distance)) * cosa;
 		}
 
-		return finalColor;
 	}
+
+	return finalColor;
 }
 
 float3 Tmpl8::Renderer::ComputeDirectionalLights(const float3 normal, const float3 intersection)
@@ -359,7 +383,12 @@ void Renderer::UI()
 		//ImGui::SetNextWindowDockID(dockspace_id, ImGuiCond_FirstUseEver);
 		ImGui::Begin("Scene Lighting", &showLights, ImGuiWindowFlags_NoCollapse);
 		ImGui::Text("Object Properties:");
+		if (ImGui::Checkbox("enable normal maps", &enableNormalMaps))
+		{
+		}
 		ImGui::End();
+
+		// Create a checkbox
 	}
 
 }
