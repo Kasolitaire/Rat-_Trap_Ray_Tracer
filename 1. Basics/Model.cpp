@@ -38,6 +38,7 @@ Model::Model(std::string path, std::string directory, std::string name, bool smo
 
 		LoadTextureType(aiTextureType_DIFFUSE, material, directory, meshData);
 		LoadTextureType(aiTextureType_HEIGHT, material, directory, meshData);
+		LoadTextureType(aiTextureType_NORMALS, material, directory, meshData);
 
 		
 
@@ -103,7 +104,7 @@ Model::Model(std::string path, std::string directory, std::string name, bool smo
 		}
 	}
 
-	m_bvh.Build(tinybvh::bvhvec4slice(reinterpret_cast<float4*>(&m_vertices[0]), m_vertices.size(), sizeof(Vertex)));
+	m_bvh.BuildHQ(tinybvh::bvhvec4slice(reinterpret_cast<float4*>(&m_vertices[0]), m_vertices.size(), sizeof(Vertex)));
 }
 
 void Model::LoadTextureType(aiTextureType aiTextureType, aiMaterial* material, std::string directory, Mesh& meshData)
@@ -126,9 +127,13 @@ void Model::LoadTextureType(aiTextureType aiTextureType, aiMaterial* material, s
 			break;
 		case aiTextureType_HEIGHT:
 			textureType = TextureType::Normal;
-			std::cout << "Normal texture path: " << aitexturePath.C_Str() << std::endl;
+			std::cout << "Height map texture path: " << aitexturePath.C_Str() << std::endl;
 			break;
-		default:
+		case aiTextureType_NORMALS:
+			textureType = TextureType::Normal;
+			std::cout << "Normal map texture path: " << aitexturePath.C_Str() << std::endl;
+			break;
+		default :
 			break;
 		}
 

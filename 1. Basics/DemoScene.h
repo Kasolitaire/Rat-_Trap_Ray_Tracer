@@ -11,7 +11,7 @@ namespace fs = std::filesystem;
 
 struct RenderData 
 {
-	Model* model;
+    unsigned modelIndex;
     unsigned int instanceIndex;
     unsigned int materialIndex;
 };
@@ -38,18 +38,25 @@ public:
   //          bvhList.push_back(&models[index]->m_bvh);
   //      }
 
-
+        LoadModel("Sponza");
         LoadModel("ilo_cube");
         //LoadModel("teapot");
-        LoadModel("Sponza");
+        LoadModel("Sphere", true);
+        Material blueDiffuse;
+        blueDiffuse.setAlbedo(float3(0.5f,0.5f,1.f));
 
-        CreateRenderObject("Monkey", "ilo_cube");
-       // CreateRenderObject("pot", "teapot");
+        Material reflective;
+        reflective.setType(MaterialType::Reflective);
+
+        CreateRenderObject("Cube1", "ilo_cube");
+        //CreateRenderObject("Cube2", "ilo_cube");
+      // CreateRenderObject("pot", "teapot", reflective);
+        CreateRenderObject("Sphere", "Sphere", reflective);
         CreateRenderObject("sponza", "Sponza");
         RenderObject& sponza = m_renderObjects.at("sponza");
         sponza.SetScale(float3(0.03f, 0.03f, 0.03f));
 
-		m_pointLights.CreatePointLight(float3(0, 10, 0), float3(1, 1, 1), 10);
+		m_pointLights.CreatePointLight(float3(0, 10, 0), float3(1, 1, 1), 100);
         //m_directionalLights.CreateDirectionalLight(float3(0, -10.f, 0), float3(1, 1, 1), 10);
 	};
 
@@ -149,7 +156,6 @@ public:
             assert(0);
         } 
 
-
 		unsigned int modelIndex = models.size();
 
 		m_modelAddressToIndexMap.emplace(model, modelIndex); // allows us to find the index of the model with the address of the model
@@ -167,26 +173,27 @@ public:
         return 0;
 	};
 
-
-
-	void CreateRenderObject(std::string objectName, std::string modelName, unsigned int materialIndex = 0) // should model index as parameter and model* as parameter
+	void CreateRenderObject(std::string objectName, std::string modelName, Material material = Material()) // should model index as parameter and model* as parameter
 	{
-        if (m_modelNameToIndexMap.find(modelName) == m_modelNameToIndexMap.end()) 
-        {
-            assert(0);  // Key doesn't exist
-        }
+        // Ensure the modelName exists in the map
+        auto it = m_modelNameToIndexMap.find(modelName);
+        assert(it != m_modelNameToIndexMap.end() && "Model name not found in the index map!");
+        unsigned int modelIndex = it->second;
 
-        unsigned int modelIndex = m_modelNameToIndexMap.at(modelName);
+        // Ensure the model index is within bounds
+        assert(modelIndex < models.size() && "Model index out of bounds in the models array!");
+
+        // Ensure the instance index correlates to the correct render data index
         unsigned int instanceIndex = instances.size();
-		Model* model = models[modelIndex];
+        assert(instanceIndex == m_renderData.size() && "Instance index does not match render data size!");
 
-		m_renderObjects.emplace(objectName, RenderObject(m_renderData.size()));
-
-        m_renderData.push_back(RenderData{ model, instanceIndex ,materialIndex });
-
+        // The material index will always be valid as you are pushing the material right after the render data.
+        m_renderObjects.emplace(objectName, RenderObject(m_renderData.size()));
+        m_renderData.push_back(RenderData{ modelIndex, instanceIndex, (unsigned int)m_materials.size() });
+        m_materials.push_back(material);
         instances.push_back(tinybvh::BLASInstance(modelIndex));
-        
-		isDirty = true;
+
+        isDirty = true;
 	};
 
     //models

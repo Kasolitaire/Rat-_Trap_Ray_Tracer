@@ -106,7 +106,18 @@ struct float3
 	float2 yz() { return float2( y, z ); }
 	float halfArea() { return x < -1e30f ? 0 : (x * y + y * z + z * x); } // for SAH calculations
 	union { struct { float x, y, z; }; float cell[3]; };
-	float& operator [] ( const int n ) { return cell[n]; }
+	float& operator [] (const int n) { return cell[n]; }
+	const float& operator [] ( const int n ) const { return cell[n]; }
+};
+struct double3
+{
+	double3() = default;
+	double3(const double a, const double b, const double c) : x(a), y(b), z(c) {}
+	double3(const double a) : x(a), y(a), z(a) {}
+	double3(const float3 a) : x((double)a.x), y((double)a.y), z((double)a.z) {}
+	double& operator [] (const int32_t i) { return cell[i]; }
+	const double& operator [] (const int32_t i) const { return cell[i]; }
+	union { struct { double x, y, z; }; double cell[3]; };
 };
 struct ALIGN( 4 ) uchar4
 {

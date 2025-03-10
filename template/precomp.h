@@ -67,7 +67,6 @@ using namespace Tmpl8;
 #define EPSILON 1e-4f
 
 #define NO_DOUBLE_PRECISION_SUPPORT
-#define TINYBVH_USE_CUSTOM_VECTOR_TYPES 
 namespace tinybvh
 {
 	using bvhint2 = Tmpl8::int2;
@@ -76,9 +75,10 @@ namespace tinybvh
 	using bvhvec2 = Tmpl8::float2;
 	using bvhvec3 = Tmpl8::float3;
 	using bvhvec4 = Tmpl8::float4;
+	using bvhdbl3 = Tmpl8::double3;
 }
+#define TINYBVH_USE_CUSTOM_VECTOR_TYPES 
 #include "tiny_bvh.h"
-
 
 // clang-format off
 

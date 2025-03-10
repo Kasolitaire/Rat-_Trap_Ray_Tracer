@@ -22,7 +22,7 @@ void Renderer::Init()
 // -----------------------------------------------------------
 // Evaluate light transport
 // -----------------------------------------------------------
-float3 Renderer::Trace( Ray& ray )
+float3 Renderer::Trace( Ray& ray, unsigned int depth)
 {
 
 	float3 finalColor = float3(0);
@@ -30,14 +30,16 @@ float3 Renderer::Trace( Ray& ray )
 	tinybvh::Ray bvh_ray(ray.O, normalize(ray.D)); // Ensure ray direction is normalized
 	scene.tlas.Intersect(bvh_ray) && bvh_ray.hit.t > 0.0f;
 
+	if (depth > 5) return SampleSky(bvh_ray.D);
+
 	if (bvh_ray.hit.t < BVH_FAR) // Check if there is a hit
 	{
 		
 		uint32_t instanceIndex = bvh_ray.hit.inst;
 		tinybvh::BLASInstance& instance = scene.instances[instanceIndex];
-		uint32_t modelIndex = instance.blasIdx;
-		Model& model = *scene.models[modelIndex];
-
+		RenderData& renderData = scene.m_renderData[instanceIndex];
+		Model& model = *scene.models[renderData.modelIndex];
+		Material& material = scene.m_materials[renderData.instanceIndex];
 
 		mat4 modelMatrix = *reinterpret_cast<mat4*>(&instance.transform);
 		mat4 inverseMatrix = *reinterpret_cast<mat4*>(&instance.invTransform);
@@ -51,45 +53,26 @@ float3 Renderer::Trace( Ray& ray )
 
 		uint32_t index = bvh_ray.hit.prim;
 
-		Vertex vertex1 = scene.models[modelIndex]->m_vertices[index * 3];
-		Vertex vertex2 = scene.models[modelIndex]->m_vertices[index * 3 + 1];
-		Vertex vertex3 = scene.models[modelIndex]->m_vertices[index * 3 + 2];
+		Vertex vertex1 = model.m_vertices[index * 3];
+		Vertex vertex2 = model.m_vertices[index * 3 + 1];
+		Vertex vertex3 = model.m_vertices[index * 3 + 2];
 
 		float3 normal1 = vertex1.normal;
 		float3 normal2 = vertex2.normal;
 		float3 normal3 = vertex3.normal;
 
 		float3 interpolatedNormal = (w * normal1) + (u * normal2) + (v * normal3);
+		float3 temp = interpolatedNormal;
 
-
-		//Interpolation can cause slight skewing, so re - orthogonalizing the tangent space helps :
-
-		//cpp
-		//	Copy
-		//	Edit
-		//	T = normalize(T - dot(T, N) * N); // Make T orthogonal to N
-		//B = cross(N, T);                  // Recompute B to ensure orthogonality
-
-		// Transform normal correctly
-		interpolatedNormal = (float3(inverseMatrix.Transposed() * float4(interpolatedNormal, 0.0f)));
-
-
-		
-
-		//mat4 TBN =  
-		/*float2 position1 = float2(scene.models[modelIndex]->m_vertices[index * 3].texCoords);
-		float2 position2 = float2(scene.models[modelIndex]->m_vertices[index * 3 + 1].position);
-		float2 position3 = float2(scene.models[modelIndex]->m_vertices[index * 3 + 2].position);*/
-
-		uint* normalTexture = nullptr;
-		float2 normalDimensions;
+		//interpolatedNormal = (float3(inverseMatrix.Transposed() * float4(interpolatedNormal, 0.0f)));
 
 		float2 interpolatedUVCoords = InterpolateUV(vertex1.texCoords, vertex2.texCoords, vertex3.texCoords, float3(w, u, v));
 		float3 albedo = float3(1.f);
 
-		if (model.m_textures.size()) 
+		// make this cleaner
+		if (model.m_textures.size())
 		{
-			for (TextureData& textureData : model.m_meshes[vertex1.meshIndex].textures) 
+			for (TextureData& textureData : model.m_meshes[vertex1.meshIndex].textures)
 			{
 				std::string textureKey = textureData.path;
 				TextureType type = textureData.type;
@@ -102,56 +85,75 @@ float3 Renderer::Trace( Ray& ray )
 
 				if (type == TextureType::Normal && enableNormalMaps)
 				{
-					float3 T = normalize(float3(vertex1.tangent * w + vertex2.tangent * u + vertex3.tangent * v));
-					float3 B = normalize(float3(vertex1.bitangent * w + vertex2.bitangent * u + vertex3.bitangent * v));
-					T = normalize(T - dot(T, interpolatedNormal) * interpolatedNormal); // Make T orthogonal to N
-					B = cross(interpolatedNormal, T);
-					B *= -1.0f;
+					float3 T = normalize(vertex1.tangent * w + vertex2.tangent * u + vertex3.tangent * v);
+					float3 B = normalize(vertex1.bitangent * w + vertex2.bitangent * u + vertex3.bitangent * v);
+					T = normalize(T - dot(T, interpolatedNormal) * interpolatedNormal); // Gram-Schmidt orthogonalization
+					B = normalize(cross(interpolatedNormal, T) * -1.0f); // Ensure correct handedness
 
+					// Manually assign the TBN matrix (assuming row-major order)
 					mat4 TBN;
 					TBN[0] = T.x;  TBN[1] = B.x;  TBN[2] = interpolatedNormal.x;  TBN[3] = 0.f;
 					TBN[4] = T.y;  TBN[5] = B.y;  TBN[6] = interpolatedNormal.y;  TBN[7] = 0.f;
-					TBN[8] = T.z;  TBN[9] = B.z;  TBN[10] = interpolatedNormal.z;  TBN[11] = 0.f;
-					TBN[12] = 0.f;  TBN[13] = 0.f;  TBN[14] = 0.f;                  TBN[15] = 1.f; // Identity row
+					TBN[8] = T.z;  TBN[9] = B.z;  TBN[10] = interpolatedNormal.z; TBN[11] = 0.f;
+					TBN[12] = 0.f; TBN[13] = 0.f; TBN[14] = 0.f; TBN[15] = 1.f; // Identity row
 
 					uint* normalTexture = model.m_textures[textureKey];
 					float3 normalSample = SampleTexture(normalTexture, textureData.dimensions.x, textureData.dimensions.y, interpolatedUVCoords, true);
 					float3 N_tangent = normalSample * 2.0f - 1.0f; // Convert from [0,1] to [-1,1]
-					interpolatedNormal = normalize(TBN * float4(normalSample, 0.f));
-					//float3 sampledNormal = SampleTexture
+
+					// Transform normal using the upper-left 3×3 portion of TBN
+					interpolatedNormal = normalize(float3(
+						TBN[0] * N_tangent.x + TBN[1] * N_tangent.y + TBN[2] * N_tangent.z,
+						TBN[4] * N_tangent.x + TBN[5] * N_tangent.y + TBN[6] * N_tangent.z,
+						TBN[8] * N_tangent.x + TBN[9] * N_tangent.y + TBN[10] * N_tangent.z
+					));
 				}
 			}
-
 		}
 
-		std::string name = model.m_name;
+		interpolatedNormal = (float3(inverseMatrix.Transposed() * float4(interpolatedNormal, 0.0f)));
+		interpolatedNormal = normalize(interpolatedNormal);
 
-		if (scene.m_pointLights.enabled && scene.m_pointLights.positions.size()) 
+
+		if (material.isReflective()) 
 		{
-			finalColor += ComputePointLights(interpolatedNormal, intersection);
-		}
+			float3 reflection = bvh_ray.D - (2.0f * dot(bvh_ray.D, interpolatedNormal)) * interpolatedNormal;
 
-		if (scene.m_directionalLights.enabled && scene.m_directionalLights.directions.size())
+			float3 newOrigin = intersection + interpolatedNormal * EPSILON;
+			return Trace(Ray(newOrigin, reflection), depth + 1);
+		}
+		else if (material.getType() == MaterialType::Glossy)
 		{
-			finalColor += ComputeDirectionalLights(interpolatedNormal, intersection);
+			// Sample a microfacet distribution
 		}
+		else if (material.getType() == MaterialType::Dielectric)
+		{
+			// Compute refraction using IOR
+		}
+		else 
+		{
+			std::string name = model.m_name;
 
+			if (scene.m_pointLights.enabled && scene.m_pointLights.positions.size())
+			{
+				finalColor += ComputePointLights(interpolatedNormal, intersection);
+			}
 
-		//return albedo;
-		return (interpolatedNormal + 1) * 0.5f;
-		//return finalColor * albedo;
+			if (scene.m_directionalLights.enabled && scene.m_directionalLights.directions.size())
+			{
+				finalColor += ComputeDirectionalLights(interpolatedNormal, intersection);
+			}
+
+			//return albedo;
+			return (interpolatedNormal + 1) * 0.5f;
+			//finalColor *= material.getAlbedo();
+			finalColor *= albedo;
+			return finalColor;
+		}
 	}
 	else
 	{
-		float u = (atan2f(ray.D.z, ray.D.x) * INV2PI + 0.5f) * skyWidth;
-		float v = acosf(ray.D.y) * INVPI * skyHeight;
-
-		int uIdx = std::clamp(static_cast<int>(u), 0, skyWidth - 1);
-		int vIdx = std::clamp(static_cast<int>(v), 0, skyHeight - 1);
-
-		int skyIdx = uIdx + vIdx * skyWidth;
-
-		return 0.65f * float3(skyPixels[skyIdx * 3], skyPixels[skyIdx * 3 + 1], skyPixels[skyIdx * 3 + 2]);
+		return SampleSky(bvh_ray.D);
 	}
 
 	//scene.FindNearest( ray );
@@ -186,7 +188,8 @@ void Renderer::Tick( float deltaTime )
 		// trace a primary ray for each pixel on the line
 		for (int x = 0; x < SCRWIDTH; x++)
 		{
-			float4 pixel = float4( Trace( camera.GetPrimaryRay( (float)x, (float)y ) ), 0 );
+			Ray primaryRay(camera.GetPrimaryRay((float)x, (float)y));
+			float4 pixel = float4( Trace( primaryRay ), 0 );
 			// translate accumulator contents to rgb32 pixels
 			screen->pixels[x + y * SCRWIDTH] = RGBF32_to_RGB8( &pixel );
 			accumulator[x + y * SCRWIDTH] = pixel;
@@ -279,6 +282,20 @@ float3 Tmpl8::Renderer::SampleTexture(uint32_t* texture, int texWidth, int texHe
 	float b = (texel & 0xFF) / 255.0f;
 
 	return float3(r, g, b);
+}
+
+float3 Tmpl8::Renderer::SampleSky(const float3& direction)
+{
+
+	float u = (atan2f(direction.z, direction.x) * INV2PI + 0.5f) * skyWidth;
+	float v = acosf(direction.y) * INVPI * skyHeight;
+
+	int uIdx = std::clamp(static_cast<int>(u), 0, skyWidth - 1);
+	int vIdx = std::clamp(static_cast<int>(v), 0, skyHeight - 1);
+
+	int skyIdx = uIdx + vIdx * skyWidth;
+
+	return 0.65f * float3(skyPixels[skyIdx * 3], skyPixels[skyIdx * 3 + 1], skyPixels[skyIdx * 3 + 2]);
 }
 
 // -----------------------------------------------------------

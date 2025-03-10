@@ -8,13 +8,14 @@ class Renderer : public TheApp
 public:
 	// game flow methods
 	void Init();
-	float3 Trace( Ray& ray );
-	void Tick( float deltaTime );
+	float3 Trace( Ray& ray, unsigned int depth = 0);
+	void Tick( float deltaTime);
 	float3 ComputePointLights(const float3 normal, const float3 intersection); // works
 	float3 ComputeDirectionalLights(const float3 normal, const float3 intersection); // works
 	void ComputeSpotLights();
 	float2 InterpolateUV(float2 uv0, float2 uv1, float2 uv2, float3 barycentricCoordinates);
 	float3 SampleTexture(uint32_t* texture, int texWidth, int texHeight, float2 uv, bool tile);
+	float3 SampleSky(const float3& direction);
 	void UI();
 	void ImGuiCreateObjectPopout(std::string objectName, bool open);
 	void Shutdown() { /* implement if you want to do things on shutdown */ }

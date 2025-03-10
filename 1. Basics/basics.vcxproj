@@ -38,7 +38,7 @@
          subdirectory.
          The debug binary is postfixed with _debug to prevent clashes with it's Release counterpart
          for the same Platform. -->
-    <OutDir>$(ProjectDir)$(Platform)\</OutDir>
+    <OutDir>$(ProjectDir)$</OutDir>
     <IntDir>$(ProjectDir)$(Platform)\$(Configuration)\</IntDir>
     <MultiProcessorCompilation>true</MultiProcessorCompilation>
   </PropertyGroup>
