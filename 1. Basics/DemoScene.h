@@ -21,40 +21,25 @@ class DemoScene
 public:
 	DemoScene() 
 	{
-
-  //      models.push_back(new Model("../assets/Suzanne.obj"));
-  //      models.push_back(new Model("../assets/teapot.obj"));
-
-		////Model& model = *models[0];
-  ////      if (model.m_bvh.usedNodes > 0)
-  ////      {  // Ensure the BVH is not empty
-  ////          bvhList.push_back(&model.m_bvh);
-  ////      }
-  ////      else { assert(0); }
-
-		//// pushing pointer to bvh for every unique model
-  //      for (unsigned int index = 0; index < models.size(); index++) 
-  //      {
-  //          bvhList.push_back(&models[index]->m_bvh);
-  //      }
+        // RUNS WITH EVERYTHING UNCOMMENTED
 
         LoadModel("Sponza");
-        LoadModel("ilo_cube");
-        //LoadModel("teapot");
+       /* LoadModel("ilo_cube");
+        LoadModel("teapot");
         LoadModel("Sphere", true);
         Material blueDiffuse;
         blueDiffuse.setAlbedo(float3(0.5f,0.5f,1.f));
 
         Material reflective;
-        reflective.setType(MaterialType::Reflective);
+        reflective.setType(MaterialType::Reflective);*/
 
-        CreateRenderObject("Cube1", "ilo_cube");
-        //CreateRenderObject("Cube2", "ilo_cube");
-      // CreateRenderObject("pot", "teapot", reflective);
-        CreateRenderObject("Sphere", "Sphere", reflective);
+       /* CreateRenderObject("Cube1", "ilo_cube");
+        CreateRenderObject("Cube2", "ilo_cube");
+       CreateRenderObject("pot", "teapot", reflective);*/
+        //CreateRenderObject("Sphere", "Sphere", reflective);
         CreateRenderObject("sponza", "Sponza");
         RenderObject& sponza = m_renderObjects.at("sponza");
-        sponza.SetScale(float3(0.03f, 0.03f, 0.03f));
+        //sponza.SetScale(float3(0.03f, 0.03f, 0.03f));
 
 		m_pointLights.CreatePointLight(float3(0, 10, 0), float3(1, 1, 1), 100);
         //m_directionalLights.CreateDirectionalLight(float3(0, -10.f, 0), float3(1, 1, 1), 10);
@@ -177,15 +162,24 @@ public:
 	{
         // Ensure the modelName exists in the map
         auto it = m_modelNameToIndexMap.find(modelName);
-        assert(it != m_modelNameToIndexMap.end() && "Model name not found in the index map!");
+        if (it == m_modelNameToIndexMap.end()) 
+        {
+            __debugbreak(); // Model name not found in the index map
+        }
         unsigned int modelIndex = it->second;
 
         // Ensure the model index is within bounds
-        assert(modelIndex < models.size() && "Model index out of bounds in the models array!");
+        if (modelIndex >= models.size()) 
+        {
+            __debugbreak(); // Model index out of bounds in the models array
+        }
 
         // Ensure the instance index correlates to the correct render data index
         unsigned int instanceIndex = instances.size();
-        assert(instanceIndex == m_renderData.size() && "Instance index does not match render data size!");
+        if (instanceIndex != m_renderData.size()) 
+        {
+            __debugbreak(); // Instance index does not match render data size
+        }
 
         // The material index will always be valid as you are pushing the material right after the render data.
         m_renderObjects.emplace(objectName, RenderObject(m_renderData.size()));

@@ -146,7 +146,7 @@ float3 Renderer::Trace( Ray& ray, unsigned int depth)
 
 			//return albedo;
 			return (interpolatedNormal + 1) * 0.5f;
-			//finalColor *= material.getAlbedo();
+			finalColor *= material.getAlbedo();
 			finalColor *= albedo;
 			return finalColor;
 		}
