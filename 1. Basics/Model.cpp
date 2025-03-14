@@ -69,6 +69,9 @@ Model::Model(std::string path, std::string directory, std::string name, bool smo
 					vertex.normal = float3(0.f);
 				}
 
+				if (std::isnan(vertex.normal.x) || std::isnan(vertex.normal.y) || std::isnan(vertex.normal.z)) __debugbreak();
+
+
 				if (mesh->HasTextureCoords(0))
 				{
 					vertex.texCoords.x = mesh->mTextureCoords[0][currentIndice].x;
@@ -88,12 +91,20 @@ Model::Model(std::string path, std::string directory, std::string name, bool smo
 					vertex.bitangent.x = mesh->mBitangents[currentIndice].x;
 					vertex.bitangent.y = mesh->mBitangents[currentIndice].y;
 					vertex.bitangent.z = mesh->mBitangents[currentIndice].z;
+
+					vertex.handedness = (dot(cross(vertex.tangent, vertex.bitangent), vertex.normal) < 0.0f) ? -1.0f : 1.0f;
 				}
-				else 
+				if(length(vertex.tangent) == 0 || length(vertex.bitangent) == 0)
 				{
-					vertex.tangent = float3(0);
-					vertex.bitangent = float3(0);
+					vertex.tangent = float3(1, 0, 0);
+					vertex.bitangent = float3(0, 1, 0);
 				}
+				if (length(vertex.tangent) == 0) __debugbreak();
+				if (length(vertex.bitangent) == 0) __debugbreak();
+	
+
+				if (std::isnan(vertex.tangent.x) || std::isnan(vertex.tangent.y) || std::isnan(vertex.tangent.z)) __debugbreak();
+				if (std::isnan(vertex.bitangent.x) || std::isnan(vertex.normal.y) || std::isnan(vertex.normal.z)) __debugbreak();
 
 				vertex.meshIndex = m_meshes.size();
 

@@ -18,10 +18,11 @@ enum class TextureType
 struct Vertex 
 {
 	float4 position;
-	float3 normal;
+	float3 normal = float3(0);
 	float2 texCoords;
 	float3 tangent;
 	float3 bitangent;
+	float handedness = 0;
 	unsigned int meshIndex;
 };
 
@@ -45,7 +46,7 @@ class Model
 {
 public :
 	Model(std::string path, std::string directory, std::string name, bool smoothNormals = false);
-	tinybvh::BVH8_CPU m_bvh;
+	tinybvh::BVH4_CPU m_bvh;
 public:
 	std::vector<Vertex> m_vertices;
 	std::unordered_map<std::string, uint*> m_textures;

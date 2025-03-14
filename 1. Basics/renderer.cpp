@@ -88,7 +88,8 @@ float3 Renderer::Trace( Ray& ray, unsigned int depth)
 					float3 T = normalize(vertex1.tangent * w + vertex2.tangent * u + vertex3.tangent * v);
 					float3 B = normalize(vertex1.bitangent * w + vertex2.bitangent * u + vertex3.bitangent * v);
 					T = normalize(T - dot(T, interpolatedNormal) * interpolatedNormal); // Gram-Schmidt orthogonalization
-					B = normalize(cross(interpolatedNormal, T) * -1.0f); // Ensure correct handedness
+					B = normalize(cross(interpolatedNormal, T)); 
+					B *= vertex1.handedness;// Ensure correct handedness
 
 					// Manually assign the TBN matrix (assuming row-major order)
 					mat4 TBN;
@@ -136,7 +137,7 @@ float3 Renderer::Trace( Ray& ray, unsigned int depth)
 
 			if (scene.m_pointLights.enabled && scene.m_pointLights.positions.size())
 			{
-				finalColor += ComputePointLights(interpolatedNormal, intersection);
+				finalColor += ComputePointLights(interpolatedNormal, intersection, albedo, -bvh_ray.D);
 			}
 
 			if (scene.m_directionalLights.enabled && scene.m_directionalLights.directions.size())
@@ -145,9 +146,9 @@ float3 Renderer::Trace( Ray& ray, unsigned int depth)
 			}
 
 			//return albedo;
-			return (interpolatedNormal + 1) * 0.5f;
-			finalColor *= material.getAlbedo();
-			finalColor *= albedo;
+			//return (interpolatedNormal + 1) * 0.5f;
+			//finalColor *= material.getAlbedo();
+			//finalColor *= albedo;
 			return finalColor;
 		}
 	}
@@ -205,9 +206,13 @@ void Renderer::Tick( float deltaTime )
 	camera.HandleInput( deltaTime );
 }
 
-float3 Tmpl8::Renderer::ComputePointLights(const float3 normal, const float3 intersection)
+static float metallic = 0.1f;
+static float roughness = 0.2f;
+
+float3 Tmpl8::Renderer::ComputePointLights(const float3 normal, const float3 intersection, float3 albedo, float3 viewDirection)
 {
 	float3 finalColor = float3(0);
+	//albedo = float3(1, 0, 0);
 
 	for (unsigned int index = 0; index < scene.m_pointLights.positions.size(); index++)
 	{
@@ -217,15 +222,24 @@ float3 Tmpl8::Renderer::ComputePointLights(const float3 normal, const float3 int
 		float distance = length(lightVector); // Correct distance before normalization
 		float3 lightDirection = lightVector / distance; // Normalized light direction
 
-		float cosa = max(0.0f, dot(normal, normalize(lightDirection)));
+		//float cosa = max(0.0f, dot(normal, normalize(lightDirection)));
 
 		float3 newOrigin = intersection + normal * EPSILON;
 		tinybvh::Ray shadowRay(newOrigin, lightDirection, distance);
 		if (!scene.tlas.IsOccludedTLAS(shadowRay))
 		{
-			finalColor += scene.m_pointLights.colors[index] * scene.m_pointLights.intensities[index] * (1 / (distance * distance)) * cosa;
-		}
 
+			//finalColor += scene.m_pointLights.colors[index] * scene.m_pointLights.intensities[index] * (1 / (distance * distance)) * cosa;
+			finalColor += ShadeLambertian(normal, lightDirection, albedo, scene.m_pointLights.colors[index], scene.m_pointLights.intensities[index], distance);
+
+			float3 fresnelReflectance = (1.0f - metallic) * float3(0.04f) + metallic * albedo;
+
+			float3 kd = 1.0f - fresnelReflectance; // Fresnel term reduces diffuse
+			kd *= 1.0f - metallic;  // Metals have no diffuse component
+
+			// Cook-Torrance specular shading
+			finalColor += CookTorranceBRDF(lightDirection, viewDirection, normal, fresnelReflectance, roughness);
+		}
 	}
 
 	return finalColor;
@@ -260,29 +274,80 @@ float2 Tmpl8::Renderer::InterpolateUV(float2 uv0, float2 uv1, float2 uv2, float3
 
 float3 Tmpl8::Renderer::SampleTexture(uint32_t* texture, int texWidth, int texHeight, float2 uv, bool tile)
 {
-	// Handle UV wrapping or clamping
-	if (tile) {
-		uv = float2(uv.x - floor(uv.x), uv.y - floor(uv.y)); // Wrap
-	}
-	else {
-		uv = float2(std::clamp(uv.x, 0.0f, 1.0f), std::clamp(uv.y, 0.0f, 1.0f)); // Clamp
-	}
+    // Handle UV wrapping or clamping
+    if (tile) {
+        uv = float2(uv.x - floor(uv.x), uv.y - floor(uv.y)); // Wrap
+    }
+    else {
+        uv = float2(std::clamp(uv.x, 0.0f, 1.0f), std::clamp(uv.y, 0.0f, 1.0f)); // Clamp
+    }
 
-	// Convert UVs to pixel coordinates
-	int x = static_cast<int>(uv.x * texWidth) % texWidth;
-	int y = static_cast<int>(uv.y * texHeight) % texHeight;
+    // Scale UV coordinates to texel space
+    float x = uv.x * (texWidth - 1);
+    float y = uv.y * (texHeight - 1);
 
-	// Fetch texel
-	int index = y * texWidth + x;
-	uint32_t texel = texture[index];
+    // Compute integer texel positions
+    int x0 = static_cast<int>(x);
+    int y0 = static_cast<int>(y);
+    int x1 = std::min(x0 + 1, texWidth - 1);
+    int y1 = std::min(y0 + 1, texHeight - 1);
 
-	// Extract RGB
-	float r = ((texel >> 16) & 0xFF) / 255.0f;
-	float g = ((texel >> 8) & 0xFF) / 255.0f;
-	float b = (texel & 0xFF) / 255.0f;
+    // Compute interpolation factors
+    float dx = x - x0;
+    float dy = y - y0;
 
-	return float3(r, g, b);
+    // Fetch the four neighboring texels
+    uint32_t texel00 = texture[y0 * texWidth + x0];
+    uint32_t texel10 = texture[y0 * texWidth + x1];
+    uint32_t texel01 = texture[y1 * texWidth + x0];
+    uint32_t texel11 = texture[y1 * texWidth + x1];
+
+    // Extract RGB components
+    auto UnpackColor = [](uint32_t texel) -> float3 {
+        return float3(
+            ((texel >> 16) & 0xFF) / 255.0f,
+            ((texel >> 8) & 0xFF) / 255.0f,
+            (texel & 0xFF) / 255.0f
+        );
+    };
+
+    float3 T00 = UnpackColor(texel00);
+    float3 T10 = UnpackColor(texel10);
+    float3 T01 = UnpackColor(texel01);
+    float3 T11 = UnpackColor(texel11);
+
+    // Bilinear interpolation
+    float3 L0 = (1.0f - dx) * T00 + dx * T10;
+    float3 L1 = (1.0f - dx) * T01 + dx * T11;
+    float3 finalColor = (1.0f - dy) * L0 + dy * L1;
+
+    return finalColor;
+
+
+	//// Handle UV wrapping or clamping
+	//if (tile) {
+	//	uv = float2(uv.x - floor(uv.x), uv.y - floor(uv.y)); // Wrap
+	//}
+	//else {
+	//	uv = float2(std::clamp(uv.x, 0.0f, 1.0f), std::clamp(uv.y, 0.0f, 1.0f)); // Clamp
+	//}
+
+	//// Convert UVs to pixel coordinates
+	//int x = static_cast<int>(uv.x * texWidth) % texWidth;
+	//int y = static_cast<int>(uv.y * texHeight) % texHeight;
+
+	//// Fetch texel
+	//int index = y * texWidth + x;
+	//uint32_t texel = texture[index];
+
+	//// Extract RGB
+	//float r = ((texel >> 16) & 0xFF) / 255.0f;
+	//float g = ((texel >> 8) & 0xFF) / 255.0f;
+	//float b = (texel & 0xFF) / 255.0f;
+
+	//return float3(r, g, b);
 }
+
 
 float3 Tmpl8::Renderer::SampleSky(const float3& direction)
 {
@@ -296,6 +361,75 @@ float3 Tmpl8::Renderer::SampleSky(const float3& direction)
 	int skyIdx = uIdx + vIdx * skyWidth;
 
 	return 0.65f * float3(skyPixels[skyIdx * 3], skyPixels[skyIdx * 3 + 1], skyPixels[skyIdx * 3 + 2]);
+}
+
+float3 Tmpl8::Renderer::CookTorranceBRDF(const float3& lightDirection, const float3& viewDirection, const float3& normal, const float3& fresnelReflectance, float roughness)
+{
+	// Calculate the halfway vector
+	float3 halfwayVector = normalize(viewDirection + lightDirection);
+
+	// Calculate the Distribution GGX
+	float D = DistributionGGX(normal, halfwayVector, roughness);
+
+	// Calculate the Fresnel-Schlick term
+	float3 F = FresnelSchlick(std::max(dot(halfwayVector, viewDirection), 0.0f), fresnelReflectance);
+
+	// Calculate the Geometry term (using Smith's approximation)
+	float G = GeometrySmith(normal, viewDirection, lightDirection, roughness);
+
+	// Dot products between normal and direction vectors
+	float NdotV = std::max(dot(normal, viewDirection), 0.0f);
+	float NdotL = std::max(dot(normal, lightDirection), 0.0f);
+
+	// Avoid division by zero (use small constant in the denominator)
+	float denominator = 4.0f * NdotV * NdotL;
+	float3 specular = (D * F * G) / std::max(denominator, 0.0001f);
+
+	return specular;
+}
+
+float3 Tmpl8::Renderer::ShadeLambertian(const float3& normal, const float3& lightVector, const float3& albedo, const float3& lightColor, float lightIntensity, float distance) // probably can optimize
+{
+	float NdotL = std::max(dot(normal, lightVector), 0.0f); // Prevent negative light contribution (cosine between N and L)
+	float attenuation = 1.0f / (distance * distance); // Inverse-square falloff
+
+	float3 diffuse = (albedo / PI) * lightColor * lightIntensity * NdotL * attenuation;
+
+	return diffuse;
+}
+
+float Tmpl8::Renderer::DistributionGGX(const float3& normal, const float3& halfwayVector, float roughness) // probably can optimize
+{
+	float a = roughness * roughness;
+	float a2 = a * a;
+	float NdotH = std::max(dot(normal, halfwayVector), 0.0f);
+	float NdotH2 = NdotH * NdotH;
+
+	float denom = (NdotH2 * (a2 - 1.0f) + 1.0f);
+	denom = PI * denom * denom;
+
+	return a2 / denom;
+}
+
+float3 Tmpl8::Renderer::FresnelSchlick(float cosTheta, const float3& fresnelReflectance) // probably can optimize
+{
+	return fresnelReflectance + (float3(1.0f) - fresnelReflectance) * pow(1.0f - cosTheta, 5.0f);
+}
+
+float Tmpl8::Renderer::GeometrySchlickGGX(float NdotV, float roughness)
+{
+	float r = (roughness + 1.0f);
+	float k = (r * r) / 8.0f;
+	return NdotV / (NdotV * (1.0f - k) + k);
+}
+
+float Tmpl8::Renderer::GeometrySmith(const float3& normal, const float3& viewDirection, const float3& lightVector, float roughness) // I just know this hides the fractals that are obscured by other fractals no clue how it works
+{
+	float NdotV = std::max(dot(normal, viewDirection), 0.0f);
+	float NdotL = std::max(dot(normal, lightVector), 0.0f);
+	float ggx1 = GeometrySchlickGGX(NdotV, roughness);
+	float ggx2 = GeometrySchlickGGX(NdotL, roughness);
+	return ggx1 * ggx2;
 }
 
 // -----------------------------------------------------------
@@ -403,6 +537,8 @@ void Renderer::UI()
 		if (ImGui::Checkbox("enable normal maps", &enableNormalMaps))
 		{
 		}
+		ImGui::SliderFloat("metallic", &metallic, 0.0f, 1.0f);
+		ImGui::SliderFloat("roughness", &roughness, 0.0f, 1.0f);
 		ImGui::End();
 
 		// Create a checkbox

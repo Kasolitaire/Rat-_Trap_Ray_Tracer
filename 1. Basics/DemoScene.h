@@ -21,27 +21,42 @@ class DemoScene
 public:
 	DemoScene() 
 	{
-        // RUNS WITH EVERYTHING UNCOMMENTED
+
+  //      models.push_back(new Model("../assets/Suzanne.obj"));
+  //      models.push_back(new Model("../assets/teapot.obj"));
+
+		////Model& model = *models[0];
+  ////      if (model.m_bvh.usedNodes > 0)
+  ////      {  // Ensure the BVH is not empty
+  ////          bvhList.push_back(&model.m_bvh);
+  ////      }
+  ////      else { assert(0); }
+
+		//// pushing pointer to bvh for every unique model
+  //      for (unsigned int index = 0; index < models.size(); index++) 
+  //      {
+  //          bvhList.push_back(&models[index]->m_bvh);
+  //      }
 
         LoadModel("Sponza");
-       /* LoadModel("ilo_cube");
+        LoadModel("ilo_cube");
         LoadModel("teapot");
         LoadModel("Sphere", true);
         Material blueDiffuse;
         blueDiffuse.setAlbedo(float3(0.5f,0.5f,1.f));
 
         Material reflective;
-        reflective.setType(MaterialType::Reflective);*/
+        reflective.setType(MaterialType::Reflective);
 
-       /* CreateRenderObject("Cube1", "ilo_cube");
-        CreateRenderObject("Cube2", "ilo_cube");
-       CreateRenderObject("pot", "teapot", reflective);*/
-        //CreateRenderObject("Sphere", "Sphere", reflective);
+       //CreateRenderObject("Cube1", "ilo_cube");
+       // CreateRenderObject("Cube2", "ilo_cube");
+       //CreateRenderObject("pot", "teapot", reflective);
+        CreateRenderObject("Sphere", "Sphere");
         CreateRenderObject("sponza", "Sponza");
         RenderObject& sponza = m_renderObjects.at("sponza");
-        //sponza.SetScale(float3(0.03f, 0.03f, 0.03f));
+        sponza.SetScale(float3(0.03f, 0.03f, 0.03f));
 
-		m_pointLights.CreatePointLight(float3(0, 10, 0), float3(1, 1, 1), 100);
+		m_pointLights.CreatePointLight(float3(-10, 10, 0), float3(1, 1, 1), 500);
         //m_directionalLights.CreateDirectionalLight(float3(0, -10.f, 0), float3(1, 1, 1), 10);
 	};
 
