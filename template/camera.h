@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 namespace Tmpl8 {
 class Camera
@@ -49,6 +49,25 @@ public:
 		topRight = camPos + ahead * 2.0f + aspect * right + up;
 		bottomLeft = camPos + ahead * 2.0f - aspect * right - up;
 		return true;
+	}
+	float pixelSpreadAngle() // when we our camera position get closer to the plane that the pixel is on. The pixel which acts like a window into the world gets larger and we need to caclulate that spread
+	{
+
+		// Compute pixel size in world space
+		float3 dX = (topRight - topLeft) / SCRWIDTH;
+		float3 dY = (bottomLeft - topLeft) / SCRHEIGHT;
+
+		// Approximate pixel spread distance
+		float spreadX = length(dX);
+		float spreadY = length(dY);
+		float pixelSize = fmaxf(spreadX, spreadY);
+
+		// Compute camera distance to the image plane
+		float3 camToPlane = (topLeft + bottomLeft + topRight) / 3.0f - camPos;
+		float distance = length(camToPlane);
+
+		// Compute the angular spread using small-angle approximation: theta ≈ pixelSize / distance
+		return atanf(pixelSize / distance);
 	}
 	float aspect = (float)SCRWIDTH / (float)SCRHEIGHT;
 	float3 camPos, camTarget;

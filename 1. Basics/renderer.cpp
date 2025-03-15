@@ -1,4 +1,4 @@
-#include "precomp.h"
+﻿#include "precomp.h"
 #include "../lib/stb_image.h"
 
 // -----------------------------------------------------------
@@ -64,12 +64,24 @@ float3 Renderer::Trace( Ray& ray, unsigned int depth)
 		float3 interpolatedNormal = (w * normal1) + (u * normal2) + (v * normal3);
 		float3 temp = interpolatedNormal;
 
-		//interpolatedNormal = (float3(inverseMatrix.Transposed() * float4(interpolatedNormal, 0.0f)));
+		// Interpolating normals, but matrix transformation is not needed for ray tracing
+		// interpolatedNormal = (float3(inverseMatrix.Transposed() * float4(interpolatedNormal, 0.0f)));
 
 		float2 interpolatedUVCoords = InterpolateUV(vertex1.texCoords, vertex2.texCoords, vertex3.texCoords, float3(w, u, v));
-		float3 albedo = float3(1.f);
 
-		// make this cleaner
+		float3 surfaceNormal = interpolatedNormal;
+		 surfaceNormal = (float3(inverseMatrix.Transposed() * float4(surfaceNormal, 0.0f)));
+		 surfaceNormal = normalize(surfaceNormal);
+
+		float3 albedo = float3(1.f);
+		float3 mipSample = float3(0.f);
+
+		RayCone rayCone;
+		rayCone.pixelSpreadAngle = camera.pixelSpreadAngle();
+		rayCone.surfaceSpreadAngle = ComputeSurfaceSpreadAngle(bvh_ray.D, surfaceNormal);
+		float triangleLODConstant = GetTriangleLODConstant(vertex1.position, vertex2.position, vertex3.position, vertex1.texCoords, vertex2.texCoords, vertex3.texCoords);
+
+		// Check if texture is available
 		if (model.m_textures.size())
 		{
 			for (TextureData& textureData : model.m_meshes[vertex1.meshIndex].textures)
@@ -81,7 +93,60 @@ float3 Renderer::Trace( Ray& ray, unsigned int depth)
 				{
 					uint* diffuseTexture = model.m_textures[textureKey];
 					albedo = SampleTexture(diffuseTexture, textureData.dimensions.x, textureData.dimensions.y, interpolatedUVCoords, true);
+					float lambda = ComputeTextureLOD(bvh_ray.D, surfaceNormal, triangleLODConstant, rayCone, textureData.dimensions.x, textureData.dimensions.y, intersection, camera.camPos);
+
+					// Calculate the number of mip levels for the texture
+					int textureWidth = textureData.dimensions.x;
+					int textureHeight = textureData.dimensions.y;
+					int levels = 1; // At least one level (the base level)
+
+
+					//if (lambda < -2.0f) mipSample = float3(1, 0, 0);  // Red = most detailed
+					//else if (lambda < 0.0f) mipSample = float3(1, 1, 0);  // Yellow
+					//else if (lambda < 2.0f) mipSample = float3(0, 1, 0);  // Green
+					//else mipSample = float3(0, 0, 1);  // Blue = least detail
+
+					// Calculate how many mipmap levels are needed
+					while (textureWidth > 1 || textureHeight > 1)
+					{
+						textureWidth = max(textureWidth / 2, 1);  // Halve the width, but ensure it doesn't go below 1
+						textureHeight = max(textureHeight / 2, 1); // Halve the height, but ensure it doesn't go below 1
+						levels++; // Increase the mipmap level count
+					}
+
+					// Compute mip level based on lambda (texture detail)
+				
+
+					int mipLevel = int(clamp(int(floorf(lambda + 0.5f)), 0, levels - 1));  // Adding 0.5 for better rounding
+
+					// Optional: Visualize the mip level (for debugging)
+					if (mipLevel == 0) {
+						mipSample = float3(1.0f, 0.0f, 0.0f);  // Red for highest detail
+					}
+					else if (mipLevel == 1) {
+						mipSample = float3(1.0f, 1.0f, 0.0f);  // Yellow for slightly lower detail
+					}
+					else if (mipLevel == 2) {
+						mipSample = float3(0.0f, 1.0f, 0.0f);  // Green for mid detail
+					}
+					else if (mipLevel == 3) {
+						mipSample = float3(0.0f, 0.5f, 1.0f);  // Light blue for lower detail
+					}
+					else if (mipLevel == 4) {
+						mipSample = float3(0.0f, 0.0f, 1.0f);  // Dark blue for low detail
+					}
+					else if (mipLevel == 5) {
+						mipSample = float3(0.5f, 0.0f, 1.0f);  // Purple for even lower detail
+					}
+					else {
+						mipSample = float3(1.0f, 1.0f, 1.0f);  // White for the lowest detail
+					}
+
+					albedo = mipSample;
+
 				}
+			
+		
 
 				if (type == TextureType::Normal && enableNormalMaps)
 				{
@@ -102,7 +167,7 @@ float3 Renderer::Trace( Ray& ray, unsigned int depth)
 					float3 normalSample = SampleTexture(normalTexture, textureData.dimensions.x, textureData.dimensions.y, interpolatedUVCoords, true);
 					float3 N_tangent = normalSample * 2.0f - 1.0f; // Convert from [0,1] to [-1,1]
 
-					// Transform normal using the upper-left 3�3 portion of TBN
+					// Transform normal using the upper-left 3×3 portion of TBN
 					interpolatedNormal = normalize(float3(
 						TBN[0] * N_tangent.x + TBN[1] * N_tangent.y + TBN[2] * N_tangent.z,
 						TBN[4] * N_tangent.x + TBN[5] * N_tangent.y + TBN[6] * N_tangent.z,
@@ -150,6 +215,7 @@ float3 Renderer::Trace( Ray& ray, unsigned int depth)
 			//finalColor *= material.getAlbedo();
 			//finalColor *= albedo;
 			return finalColor;
+			return mipSample;
 		}
 	}
 	else
@@ -430,6 +496,67 @@ float Tmpl8::Renderer::GeometrySmith(const float3& normal, const float3& viewDir
 	float ggx1 = GeometrySchlickGGX(NdotV, roughness);
 	float ggx2 = GeometrySchlickGGX(NdotL, roughness);
 	return ggx1 * ggx2;
+}
+
+float Tmpl8::Renderer::ComputeSurfaceSpreadAngle(float3 rayDirection, float3 surfaceNormal)
+{
+	// Normalize vectors if necessary (optional if they're already normalized)
+	rayDirection = normalize(rayDirection);
+	surfaceNormal = normalize(surfaceNormal);
+
+	// Calculate the dot product between the ray and the surface normal
+	float dotProduct = dot(rayDirection, surfaceNormal);
+
+	// Clamp the dot product to the range [-1, 1] to avoid domain errors
+	dotProduct = clamp(dotProduct, -1.0f, 1.0f);
+
+	// Calculate the angle between the ray and the surface normal
+	float angle = acos(dotProduct);  // The angle is in radians
+
+	return angle;  // This is the surface spread angle in radians
+}
+
+float Tmpl8::Renderer::ComputeTextureLOD(float3 rayDirection, float3 normal, float triangleLODConstant, RayCone cone, float textureWidth, float textureHeight, float3 surfacePoint, float3 cameraPosition)
+{
+	float lambda = triangleLODConstant;
+
+	// Add pixel spread angle contribution
+	lambda += log2f(fmaxf(abs(cone.pixelSpreadAngle), 1e-6f));
+
+	// Account for texture resolution
+	lambda += 0.5f * log2f(textureWidth * textureHeight);
+
+	// Account for foreshortening based on angle between normal and ray
+	lambda -= log2f(fmaxf(abs(dot(normalize(rayDirection), normalize(normal))), 1e-6f));
+
+	// *** NEW: Add distance term ***
+	float distance = length(surfacePoint - cameraPosition);
+	lambda += log2f(distance);  // The farther away, the higher the mip level
+
+	return lambda;
+}
+
+float Tmpl8::Renderer::GetTriangleLODConstant(float3 v0, float3 v1, float3 v2, float2 uv0, float2 uv1, float2 uv2)
+{
+	// Compute world-space triangle area
+	float3 edge1 = v1 - v0;
+	float3 edge2 = v2 - v0;
+	float P_a = 0.5f * length(cross(edge1, edge2));
+
+	// Compute texture-space triangle area
+	float2 uvEdge1 = uv1 - uv0;
+	float2 uvEdge2 = uv2 - uv0;
+	float T_a = 0.5f * fabs(uvEdge1.x * uvEdge2.y - uvEdge1.y * uvEdge2.x);
+
+	// Prevent division by zero or extreme values
+	P_a = fmaxf(P_a, 1e-6f);
+	T_a = fmaxf(T_a, 1e-6f);
+
+	// Normalize LOD constant
+	float lodConstant = 0.5f * log2f(T_a / P_a);
+	lodConstant = clamp(lodConstant, -5.0f, 5.0f); // Keep values in a reasonable range
+
+	return lodConstant;
 }
 
 // -----------------------------------------------------------

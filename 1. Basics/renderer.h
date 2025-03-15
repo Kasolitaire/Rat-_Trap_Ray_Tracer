@@ -1,7 +1,12 @@
-#pragma once
+﻿#pragma once
 #include "DemoScene.h"
 namespace Tmpl8
 {
+	struct RayCone 
+	{
+		float pixelSpreadAngle;                // Called wi in the text
+		float surfaceSpreadAngle;          // Called γi in the text
+	};
 
 class Renderer : public TheApp
 {
@@ -24,6 +29,11 @@ public:
 	float3 FresnelSchlick(float cosTheta, const float3& fresnelReflectance);
 	float GeometrySchlickGGX(float NdotV, float roughness);
 	float GeometrySmith(const float3& normal, const float3& viewDirection, const float3& lightVector, float roughness);
+
+	//mipmapping
+	float ComputeSurfaceSpreadAngle(float3 rayDirection, float3 surfaceNormal);
+	float ComputeTextureLOD(float3 rayDirection, float3 normal, float triangleLODConstant, RayCone cone, float textureWidth, float textureHeight, float3 surfacePoint, float3 cameraPosition);
+	float GetTriangleLODConstant(float3 v0, float3 v1, float3 v2, float2 uv0, float2 uv1, float2 uv2);
 
 	void UI();
 	void ImGuiCreateObjectPopout(std::string objectName, bool open);

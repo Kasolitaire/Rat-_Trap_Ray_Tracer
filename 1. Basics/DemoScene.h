@@ -42,16 +42,23 @@ public:
         LoadModel("ilo_cube");
         LoadModel("teapot");
         LoadModel("Sphere", true);
+        LoadModel("Plane", true);
+        LoadModel("DamagedHelmet", true);
         Material blueDiffuse;
         blueDiffuse.setAlbedo(float3(0.5f,0.5f,1.f));
 
         Material reflective;
         reflective.setType(MaterialType::Reflective);
 
-       //CreateRenderObject("Cube1", "ilo_cube");
+        //CreateRenderObject("Cube1", "ilo_cube");
+
+        //CreateRenderObject("Plane", "Plane");
+       /* RenderObject& plane = m_renderObjects.at("Plane");
+        plane.SetScale(float3(100.f, 100.f, 100.f));*/
+
        // CreateRenderObject("Cube2", "ilo_cube");
-       //CreateRenderObject("pot", "teapot", reflective);
-        CreateRenderObject("Sphere", "Sphere");
+       CreateRenderObject("DamagedHelmet", "DamagedHelmet");
+        /*CreateRenderObject("Sphere", "Sphere", reflective);*/
         CreateRenderObject("sponza", "Sponza");
         RenderObject& sponza = m_renderObjects.at("sponza");
         sponza.SetScale(float3(0.03f, 0.03f, 0.03f));
