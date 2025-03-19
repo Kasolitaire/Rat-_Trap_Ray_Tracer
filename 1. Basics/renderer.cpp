@@ -5,6 +5,8 @@
 // Initialize the renderer
 // -----------------------------------------------------------
 static bool enableNormalMaps = true;
+static bool enableMipMapping = true;
+static bool viewMipMapping = true;
 
 void Renderer::Init()
 {
@@ -79,103 +81,196 @@ float3 Renderer::Trace( Ray& ray, unsigned int depth)
 		RayCone rayCone;
 		rayCone.pixelSpreadAngle = camera.pixelSpreadAngle();
 		rayCone.surfaceSpreadAngle = ComputeSurfaceSpreadAngle(bvh_ray.D, surfaceNormal);
-		float triangleLODConstant = GetTriangleLODConstant(vertex1.position, vertex2.position, vertex3.position, vertex1.texCoords, vertex2.texCoords, vertex3.texCoords);
+		float triangleLODConstant = GetTriangleLODConstant(vertex1.position, vertex2.position, vertex3.position, vertex1.texCoords, vertex2.texCoords, vertex3.texCoords); // can be precalculated
+
+		Mesh& mesh = model.m_meshes[vertex1.meshIndex];
+
+		float3 scale = float3(instance.transform[0], instance.transform[5], instance.transform[10]);
+		float modelScale = length(scale);
+
+		if (mesh.diffuseTextures.size()) 
+		{
+			uint* baseDiffuseTexture = mesh.diffuseTextures[0].mips[0].texture;
+			float2 baseDimensions = mesh.diffuseTextures[0].mips[0].dimensions;
+			int levels = mesh.diffuseTextures[0].mips.size();
+
+			float lambda = ComputeTextureLOD(bvh_ray.D, surfaceNormal, triangleLODConstant, rayCone, baseDimensions.x, baseDimensions.y, intersection, bvh_ray.O);
+			int mipLevel = int(clamp(int(floorf(lambda + 0.5f)), 0, levels - 1));  // Adding 0.5 for better rounding
+
+			Mip selectedMip = mesh.diffuseTextures[0].mips[mipLevel];
+
+			uint* selectedDiffuseTexture = selectedMip.texture;
+			float2 selectedDimensions = selectedMip.dimensions;
+
+			if(enableMipMapping) albedo = SampleTexture(selectedDiffuseTexture, selectedDimensions.x, selectedDimensions.y, interpolatedUVCoords, true);
+			else albedo = SampleTexture(baseDiffuseTexture, baseDimensions.x, baseDimensions.y, interpolatedUVCoords, true);
+
+			if (viewMipMapping) 
+			{
+				if (mipLevel == 0) {
+					mipSample = float3(1.0f, 0.0f, 0.0f);  // Red for highest detail
+				}
+				else if (mipLevel == 1) {
+					mipSample = float3(1.0f, 1.0f, 0.0f);  // Yellow for slightly lower detail
+				}
+				else if (mipLevel == 2) {
+					mipSample = float3(0.0f, 1.0f, 0.0f);  // Green for mid detail
+				}
+				else if (mipLevel == 3) {
+					mipSample = float3(0.0f, 0.5f, 1.0f);  // Light blue for lower detail
+				}
+				else if (mipLevel == 4) {
+					mipSample = float3(0.0f, 0.0f, 1.0f);  // Dark blue for low detail
+				}
+				else if (mipLevel == 5) {
+					mipSample = float3(0.5f, 0.0f, 1.0f);  // Purple for even lower detail
+				}
+				else {
+					mipSample = float3(1.0f, 1.0f, 1.0f);  // White for the lowest detail
+				}
+
+				albedo = mipSample;
+			}
+			
+		}
+
+		if (mesh.normalTextures.size() && enableNormalMaps)
+		{
+			float3 T = normalize(vertex1.tangent * w + vertex2.tangent * u + vertex3.tangent * v);
+			float3 B = normalize(vertex1.bitangent * w + vertex2.bitangent * u + vertex3.bitangent * v);
+			T = normalize(T - dot(T, interpolatedNormal) * interpolatedNormal); // Gram-Schmidt orthogonalization
+			B = normalize(cross(interpolatedNormal, T));
+			B *= vertex1.handedness;// Ensure correct handedness
+
+			// Manually assign the TBN matrix (assuming row-major order)
+			mat4 TBN;
+			TBN[0] = T.x;  TBN[1] = B.x;  TBN[2] = interpolatedNormal.x;  TBN[3] = 0.f;
+			TBN[4] = T.y;  TBN[5] = B.y;  TBN[6] = interpolatedNormal.y;  TBN[7] = 0.f;
+			TBN[8] = T.z;  TBN[9] = B.z;  TBN[10] = interpolatedNormal.z; TBN[11] = 0.f;
+			TBN[12] = 0.f; TBN[13] = 0.f; TBN[14] = 0.f; TBN[15] = 1.f; // Identity row
+
+			uint* baseNormalTexture = mesh.normalTextures[0].mips[0].texture;
+			float2 baseDimensions = mesh.normalTextures[0].mips[0].dimensions;
+			int levels = mesh.normalTextures[0].mips.size();
+
+			float lambda = ComputeTextureLOD(bvh_ray.D, surfaceNormal, triangleLODConstant, rayCone, baseDimensions.x, baseDimensions.y, intersection, bvh_ray.O);
+			int mipLevel = int(clamp(int(floorf(lambda + 0.5f)), 0, levels - 1));  // Adding 0.5 for better rounding
+
+			Mip selectedMip = mesh.normalTextures[0].mips[mipLevel];
+
+			uint* selectedNormalTexture = selectedMip.texture;
+			float2 selectedDimensions = selectedMip.dimensions;
+
+	/*		uint* normalTexture = mesh.normalTextures[0].mips[0].texture;
+			float2 dimensions = mesh.diffuseTextures[0].mips[0].dimensions;*/
+			float3 normalSample = float3(0);
+			if (enableMipMapping) normalSample = SampleTexture(selectedNormalTexture, selectedDimensions.x, selectedDimensions.y, interpolatedUVCoords, true);
+			else normalSample = SampleTexture(baseNormalTexture, baseDimensions.x, baseDimensions.y, interpolatedUVCoords, true);
+			float3 N_tangent = normalSample * 2.0f - 1.0f; // Convert from [0,1] to [-1,1]
+
+			// Transform normal using the upper-left 3×3 portion of TBN
+			interpolatedNormal = normalize(float3(
+				TBN[0] * N_tangent.x + TBN[1] * N_tangent.y + TBN[2] * N_tangent.z,
+				TBN[4] * N_tangent.x + TBN[5] * N_tangent.y + TBN[6] * N_tangent.z,
+				TBN[8] * N_tangent.x + TBN[9] * N_tangent.y + TBN[10] * N_tangent.z
+			));
+		}
 
 		// Check if texture is available
-		if (model.m_textures.size())
-		{
-			for (TextureData& textureData : model.m_meshes[vertex1.meshIndex].textures)
-			{
-				std::string textureKey = textureData.path;
-				TextureType type = textureData.type;
+		//if (model.m_textures.size())
+		//{
+		//	for (TextureData& textureData : model.m_meshes[vertex1.meshIndex].textures)
+		//	{
+		//		std::string textureKey = textureData.path;
+		//		TextureType type = textureData.type;
 
-				if (type == TextureType::Diffuse)
-				{
-					uint* diffuseTexture = model.m_textures[textureKey];
-					albedo = SampleTexture(diffuseTexture, textureData.dimensions.x, textureData.dimensions.y, interpolatedUVCoords, true);
-					float lambda = ComputeTextureLOD(bvh_ray.D, surfaceNormal, triangleLODConstant, rayCone, textureData.dimensions.x, textureData.dimensions.y, intersection, camera.camPos);
+		//		if (type == TextureType::Diffuse)
+		//		{
+		//			uint* diffuseTexture = model.m_textures[textureKey];
+		//			albedo = SampleTexture(diffuseTexture, textureData.dimensions.x, textureData.dimensions.y, interpolatedUVCoords, true);
+		//			float lambda = ComputeTextureLOD(bvh_ray.D, surfaceNormal, triangleLODConstant, rayCone, textureData.dimensions.x, textureData.dimensions.y, intersection, camera.camPos);
 
-					// Calculate the number of mip levels for the texture
-					int textureWidth = textureData.dimensions.x;
-					int textureHeight = textureData.dimensions.y;
-					int levels = 1; // At least one level (the base level)
+		//			// Calculate the number of mip levels for the texture
+		//			int textureWidth = textureData.dimensions.x;
+		//			int textureHeight = textureData.dimensions.y;
+		//			int levels = 1; // At least one level (the base level)
 
 
-					//if (lambda < -2.0f) mipSample = float3(1, 0, 0);  // Red = most detailed
-					//else if (lambda < 0.0f) mipSample = float3(1, 1, 0);  // Yellow
-					//else if (lambda < 2.0f) mipSample = float3(0, 1, 0);  // Green
-					//else mipSample = float3(0, 0, 1);  // Blue = least detail
+		//			//if (lambda < -2.0f) mipSample = float3(1, 0, 0);  // Red = most detailed
+		//			//else if (lambda < 0.0f) mipSample = float3(1, 1, 0);  // Yellow
+		//			//else if (lambda < 2.0f) mipSample = float3(0, 1, 0);  // Green
+		//			//else mipSample = float3(0, 0, 1);  // Blue = least detail
 
-					// Calculate how many mipmap levels are needed
-					while (textureWidth > 1 || textureHeight > 1)
-					{
-						textureWidth = max(textureWidth / 2, 1);  // Halve the width, but ensure it doesn't go below 1
-						textureHeight = max(textureHeight / 2, 1); // Halve the height, but ensure it doesn't go below 1
-						levels++; // Increase the mipmap level count
-					}
+		//			// Calculate how many mipmap levels are needed
+		//			//while (textureWidth > 1 || textureHeight > 1)
+		//			//{
+		//			//	textureWidth = max(textureWidth / 2, 1);  // Halve the width, but ensure it doesn't go below 1
+		//			//	textureHeight = max(textureHeight / 2, 1); // Halve the height, but ensure it doesn't go below 1
+		//			//	levels++; // Increase the mipmap level count
+		//			//}
 
-					// Compute mip level based on lambda (texture detail)
-				
+		//			//// Compute mip level based on lambda (texture detail)
+		//		
 
-					int mipLevel = int(clamp(int(floorf(lambda + 0.5f)), 0, levels - 1));  // Adding 0.5 for better rounding
+		//			//int mipLevel = int(clamp(int(floorf(lambda + 0.5f)), 0, levels - 1));  // Adding 0.5 for better rounding
 
-					// Optional: Visualize the mip level (for debugging)
-					if (mipLevel == 0) {
-						mipSample = float3(1.0f, 0.0f, 0.0f);  // Red for highest detail
-					}
-					else if (mipLevel == 1) {
-						mipSample = float3(1.0f, 1.0f, 0.0f);  // Yellow for slightly lower detail
-					}
-					else if (mipLevel == 2) {
-						mipSample = float3(0.0f, 1.0f, 0.0f);  // Green for mid detail
-					}
-					else if (mipLevel == 3) {
-						mipSample = float3(0.0f, 0.5f, 1.0f);  // Light blue for lower detail
-					}
-					else if (mipLevel == 4) {
-						mipSample = float3(0.0f, 0.0f, 1.0f);  // Dark blue for low detail
-					}
-					else if (mipLevel == 5) {
-						mipSample = float3(0.5f, 0.0f, 1.0f);  // Purple for even lower detail
-					}
-					else {
-						mipSample = float3(1.0f, 1.0f, 1.0f);  // White for the lowest detail
-					}
+		//			//// Optional: Visualize the mip level (for debugging)
+		//			//if (mipLevel == 0) {
+		//			//	mipSample = float3(1.0f, 0.0f, 0.0f);  // Red for highest detail
+		//			//}
+		//			//else if (mipLevel == 1) {
+		//			//	mipSample = float3(1.0f, 1.0f, 0.0f);  // Yellow for slightly lower detail
+		//			//}
+		//			//else if (mipLevel == 2) {
+		//			//	mipSample = float3(0.0f, 1.0f, 0.0f);  // Green for mid detail
+		//			//}
+		//			//else if (mipLevel == 3) {
+		//			//	mipSample = float3(0.0f, 0.5f, 1.0f);  // Light blue for lower detail
+		//			//}
+		//			//else if (mipLevel == 4) {
+		//			//	mipSample = float3(0.0f, 0.0f, 1.0f);  // Dark blue for low detail
+		//			//}
+		//			//else if (mipLevel == 5) {
+		//			//	mipSample = float3(0.5f, 0.0f, 1.0f);  // Purple for even lower detail
+		//			//}
+		//			//else {
+		//			//	mipSample = float3(1.0f, 1.0f, 1.0f);  // White for the lowest detail
+		//			//}
 
-					albedo = mipSample;
+		//			//albedo = mipSample;
 
-				}
-			
-		
+		//		}
+		//	
+		//
 
-				if (type == TextureType::Normal && enableNormalMaps)
-				{
-					float3 T = normalize(vertex1.tangent * w + vertex2.tangent * u + vertex3.tangent * v);
-					float3 B = normalize(vertex1.bitangent * w + vertex2.bitangent * u + vertex3.bitangent * v);
-					T = normalize(T - dot(T, interpolatedNormal) * interpolatedNormal); // Gram-Schmidt orthogonalization
-					B = normalize(cross(interpolatedNormal, T)); 
-					B *= vertex1.handedness;// Ensure correct handedness
+		//		if (type == TextureType::Normal && enableNormalMaps)
+		//		{
+		//			float3 T = normalize(vertex1.tangent * w + vertex2.tangent * u + vertex3.tangent * v);
+		//			float3 B = normalize(vertex1.bitangent * w + vertex2.bitangent * u + vertex3.bitangent * v);
+		//			T = normalize(T - dot(T, interpolatedNormal) * interpolatedNormal); // Gram-Schmidt orthogonalization
+		//			B = normalize(cross(interpolatedNormal, T)); 
+		//			B *= vertex1.handedness;// Ensure correct handedness
 
-					// Manually assign the TBN matrix (assuming row-major order)
-					mat4 TBN;
-					TBN[0] = T.x;  TBN[1] = B.x;  TBN[2] = interpolatedNormal.x;  TBN[3] = 0.f;
-					TBN[4] = T.y;  TBN[5] = B.y;  TBN[6] = interpolatedNormal.y;  TBN[7] = 0.f;
-					TBN[8] = T.z;  TBN[9] = B.z;  TBN[10] = interpolatedNormal.z; TBN[11] = 0.f;
-					TBN[12] = 0.f; TBN[13] = 0.f; TBN[14] = 0.f; TBN[15] = 1.f; // Identity row
+		//			// Manually assign the TBN matrix (assuming row-major order)
+		//			mat4 TBN;
+		//			TBN[0] = T.x;  TBN[1] = B.x;  TBN[2] = interpolatedNormal.x;  TBN[3] = 0.f;
+		//			TBN[4] = T.y;  TBN[5] = B.y;  TBN[6] = interpolatedNormal.y;  TBN[7] = 0.f;
+		//			TBN[8] = T.z;  TBN[9] = B.z;  TBN[10] = interpolatedNormal.z; TBN[11] = 0.f;
+		//			TBN[12] = 0.f; TBN[13] = 0.f; TBN[14] = 0.f; TBN[15] = 1.f; // Identity row
 
-					uint* normalTexture = model.m_textures[textureKey];
-					float3 normalSample = SampleTexture(normalTexture, textureData.dimensions.x, textureData.dimensions.y, interpolatedUVCoords, true);
-					float3 N_tangent = normalSample * 2.0f - 1.0f; // Convert from [0,1] to [-1,1]
+		//			uint* normalTexture = model.m_textures[textureKey];
+		//			float3 normalSample = SampleTexture(normalTexture, textureData.dimensions.x, textureData.dimensions.y, interpolatedUVCoords, true);
+		//			float3 N_tangent = normalSample * 2.0f - 1.0f; // Convert from [0,1] to [-1,1]
 
-					// Transform normal using the upper-left 3×3 portion of TBN
-					interpolatedNormal = normalize(float3(
-						TBN[0] * N_tangent.x + TBN[1] * N_tangent.y + TBN[2] * N_tangent.z,
-						TBN[4] * N_tangent.x + TBN[5] * N_tangent.y + TBN[6] * N_tangent.z,
-						TBN[8] * N_tangent.x + TBN[9] * N_tangent.y + TBN[10] * N_tangent.z
-					));
-				}
-			}
-		}
+		//			// Transform normal using the upper-left 3×3 portion of TBN
+		//			interpolatedNormal = normalize(float3(
+		//				TBN[0] * N_tangent.x + TBN[1] * N_tangent.y + TBN[2] * N_tangent.z,
+		//				TBN[4] * N_tangent.x + TBN[5] * N_tangent.y + TBN[6] * N_tangent.z,
+		//				TBN[8] * N_tangent.x + TBN[9] * N_tangent.y + TBN[10] * N_tangent.z
+		//			));
+		//		}
+		//	}
+		//}
 
 		interpolatedNormal = (float3(inverseMatrix.Transposed() * float4(interpolatedNormal, 0.0f)));
 		interpolatedNormal = normalize(interpolatedNormal);
@@ -210,12 +305,12 @@ float3 Renderer::Trace( Ray& ray, unsigned int depth)
 				finalColor += ComputeDirectionalLights(interpolatedNormal, intersection);
 			}
 
-			//return albedo;
-			//return (interpolatedNormal + 1) * 0.5f;
+			return finalColor;
+			return (interpolatedNormal + 1) * 0.5f;
+			return albedo;
+			return mipSample;
 			//finalColor *= material.getAlbedo();
 			//finalColor *= albedo;
-			return finalColor;
-			return mipSample;
 		}
 	}
 	else
@@ -526,6 +621,11 @@ float Tmpl8::Renderer::ComputeTextureLOD(float3 rayDirection, float3 normal, flo
 	// Account for texture resolution
 	lambda += 0.5f * log2f(textureWidth * textureHeight);
 
+	// Account for foreshortening (apply a minimum clamp to avoid extreme LOD drop)
+	float cosTheta = fmaxf(abs(dot(normalize(rayDirection), normalize(normal))), 0.2f); // Min threshold to avoid excessive LOD reduction
+	lambda -= log2f(cosTheta);
+
+
 	// Account for foreshortening based on angle between normal and ray
 	lambda -= log2f(fmaxf(abs(dot(normalize(rayDirection), normalize(normal))), 1e-6f));
 
@@ -541,12 +641,12 @@ float Tmpl8::Renderer::GetTriangleLODConstant(float3 v0, float3 v1, float3 v2, f
 	// Compute world-space triangle area
 	float3 edge1 = v1 - v0;
 	float3 edge2 = v2 - v0;
-	float P_a = 0.5f * length(cross(edge1, edge2));
+	float P_a = length(cross(edge1, edge2));
 
 	// Compute texture-space triangle area
 	float2 uvEdge1 = uv1 - uv0;
 	float2 uvEdge2 = uv2 - uv0;
-	float T_a = 0.5f * fabs(uvEdge1.x * uvEdge2.y - uvEdge1.y * uvEdge2.x);
+	float T_a = fabs(uvEdge1.x * uvEdge2.y - uvEdge1.y * uvEdge2.x);
 
 	// Prevent division by zero or extreme values
 	P_a = fmaxf(P_a, 1e-6f);
@@ -662,6 +762,12 @@ void Renderer::UI()
 		ImGui::Begin("Scene Lighting", &showLights, ImGuiWindowFlags_NoCollapse);
 		ImGui::Text("Object Properties:");
 		if (ImGui::Checkbox("enable normal maps", &enableNormalMaps))
+		{
+		}
+		if (ImGui::Checkbox("enable MipMapping", &enableMipMapping))
+		{
+		}
+		if (ImGui::Checkbox("view MipMapping", &viewMipMapping))
 		{
 		}
 		ImGui::SliderFloat("metallic", &metallic, 0.0f, 1.0f);

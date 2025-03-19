@@ -64,6 +64,13 @@ using namespace std;
 // namespaces
 using namespace Tmpl8;
 
+#ifndef GL_TEXTURE_MAX_ANISOTROPY
+#define GL_TEXTURE_MAX_ANISOTROPY 0x84FE
+#endif
+#ifndef GL_MAX_TEXTURE_MAX_ANISOTROPY
+#define GL_MAX_TEXTURE_MAX_ANISOTROPY 0x84FF
+#endif
+
 #define EPSILON 1e-4f
 
 #define NO_DOUBLE_PRECISION_SUPPORT

@@ -120,62 +120,100 @@ Model::Model(std::string path, std::string directory, std::string name, bool smo
 
 void Model::LoadTextureType(aiTextureType aiTextureType, aiMaterial* material, std::string directory, Mesh& meshData)
 {
-	unsigned int normalTextureCount = material->GetTextureCount(aiTextureType);
-	for (unsigned int normalTextureIndex = 0; normalTextureIndex < normalTextureCount; normalTextureIndex++)
+	unsigned int textureCount = material->GetTextureCount(aiTextureType);
+	for (unsigned int textureIndex = 0; textureIndex < textureCount; textureIndex++)
 	{
-		TextureData textureData;
+		//TextureData textureData;
+		Texture texture;
 		aiString aitexturePath;
 
-		material->GetTexture(aiTextureType, normalTextureIndex, &aitexturePath);
+		material->GetTexture(aiTextureType, textureIndex, &aitexturePath);
 		std::string texturePath = aitexturePath.C_Str();
-		TextureType textureType;
+
+		Surface surface = Surface((directory + "/" + texturePath).c_str());
+
+		// generate mip maps using open gl
+
+		GLuint textureID;
+		glGenTextures(1, &textureID);
+		glBindTexture(GL_TEXTURE_2D, textureID);
+
+		// Upload sRGB texture for correct mipmap filtering
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_SRGB8_ALPHA8, surface.width, surface.height, 0, GL_RGBA, GL_UNSIGNED_BYTE, surface.pixels);
+
+		// Set filtering parameters
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR); // Trilinear filtering
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+		// Enable anisotropic filtering if supported
+		float maxAniso = 0.0f;
+		glGetFloatv(GL_MAX_TEXTURE_MAX_ANISOTROPY, &maxAniso); // Query max supported level
+		glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAX_ANISOTROPY, maxAniso); // Set to max
+		// Generate mipmaps after setting all parameters
+		glGenerateMipmap(GL_TEXTURE_2D);
+
+		int mipLevels = 1 + std::floor(std::log2(std::max(surface.width, surface.height)));
+
+		for (int level = 0; level < mipLevels; level++) 
+		{
+			int mipWidth = std::max(1, surface.width >> level);
+			int mipHeight = std::max(1, surface.height >> level);
+
+			uint* mipPixels = new uint[mipWidth * mipHeight]; // Allocate storage
+			glGetTexImage(GL_TEXTURE_2D, level, GL_RGBA, GL_UNSIGNED_BYTE, mipPixels);
+
+			Mip mip;
+			mip.texture = mipPixels;
+			mip.dimensions = float2(mipWidth, mipHeight);
+			texture.mips.push_back(mip);
+		}
 
 		switch (aiTextureType)
 		{
 		case aiTextureType_DIFFUSE:
-			textureType = TextureType::Diffuse;
 			std::cout << "Diffuse texture path: " << aitexturePath.C_Str() << std::endl;
+			meshData.diffuseTextures.push_back(texture);
 			break;
 		case aiTextureType_HEIGHT:
-			textureType = TextureType::Normal;
 			std::cout << "Height map texture path: " << aitexturePath.C_Str() << std::endl;
+			meshData.normalTextures.push_back(texture);
 			break;
 		case aiTextureType_NORMALS:
-			textureType = TextureType::Normal;
 			std::cout << "Normal map texture path: " << aitexturePath.C_Str() << std::endl;
+			meshData.normalTextures.push_back(texture);
 			break;
 		default :
 			break;
 		}
 
-		if (!m_textures.count(texturePath))
-		{
-			Surface texture = Surface((directory + "/" + texturePath).c_str());
+		//if (!m_textures.count(texturePath))
+		//{
+		//	Surface surface = Surface((directory + "/" + texturePath).c_str());
 
-			textureData.dimensions.x = texture.width;
-			textureData.dimensions.y = texture.height;
-			textureData.path = texturePath;
-			textureData.type = textureType;
+		//	textureData.dimensions.x = surface.width;
+		//	textureData.dimensions.y = surface.height;
+		//	textureData.path = texturePath;
+		//	textureData.type = textureType;
 
-			meshData.textures.push_back(textureData);
+		//	meshData.textures.push_back(textureData);
 
-			// Create a deep copy of the pixel data
-			uint* texturePixelsCopy = new uint[texture.width * texture.height];
-			std::memcpy(texturePixelsCopy, texture.pixels, texture.width * texture.height * sizeof(uint));
+		//	// Create a deep copy of the pixel data
+		//	uint* texturePixelsCopy = new uint[surface.width * surface.height];
+		//	std::memcpy(texturePixelsCopy, surface.pixels, surface.width * surface.height * sizeof(uint));
 
-			// Store the copied pixel data in the map
-			m_textures.emplace(texturePath, texturePixelsCopy);
-		}
-		else
-		{
-			Surface texture = Surface((directory + "/" + texturePath).c_str());
+		//	// Store the copied pixel data in the map
+		//	m_textures.emplace(texturePath, texturePixelsCopy);
+		//}
+		//else
+		//{
+		//	Surface texture = Surface((directory + "/" + texturePath).c_str());
 
-			textureData.dimensions.x = texture.width;
-			textureData.dimensions.y = texture.height;
-			textureData.path = texturePath;
-			textureData.type = textureType;
+		//	textureData.dimensions.x = surface.width;
+		//	textureData.dimensions.y = surface.height;
+		//	textureData.path = texturePath;
+		//	textureData.type = textureType;
 
-			meshData.textures.push_back(textureData);
-		}
+		//	meshData.textures.push_back(textureData);
+		//}
 	}
 }

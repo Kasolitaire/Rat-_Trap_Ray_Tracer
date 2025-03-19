@@ -15,6 +15,18 @@ enum class TextureType
 	Normal
 };
 
+struct Mip 
+{
+	float2 dimensions;
+	uint* texture;
+};
+
+struct Texture 
+{
+	std::vector<Mip> mips;
+	// maybe more data should go here not sure
+};
+
 struct Vertex 
 {
 	float4 position;
@@ -25,7 +37,6 @@ struct Vertex
 	float handedness = 0;
 	unsigned int meshIndex;
 };
-
 
 struct TextureData
 {
@@ -40,6 +51,10 @@ struct Mesh
 	// maybe add mesh name
 	// maybe also add material
 	std::vector<TextureData> textures;
+
+	std::vector<Texture> diffuseTextures;
+	std::vector<Texture> normalTextures;
+	// other types
 };
 
 class Model
