@@ -1,5 +1,8 @@
 ﻿#include "precomp.h"
 #include "../lib/stb_image.h"
+#include <iostream>
+#include <chrono>
+using namespace chrono;
 
 // -----------------------------------------------------------
 // Initialize the renderer
@@ -101,6 +104,19 @@ float3 Renderer::Trace( Ray& ray, unsigned int depth)
 
 			uint* selectedDiffuseTexture = selectedMip.texture;
 			float2 selectedDimensions = selectedMip.dimensions;
+
+			using Clock = std::chrono::high_resolution_clock;
+			int iterations = 1000000; // 1 million calls
+			auto start = Clock::now();
+			float3 result = float3();
+			for (int i = 0; i < iterations; ++i) 
+			{
+				result = SampleTexture(selectedDiffuseTexture, selectedDimensions.x, selectedDimensions.y, interpolatedUVCoords, true);
+			}
+			auto end = Clock::now();
+			auto duration = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count();
+			std::cout << "Average execution time: " << duration / iterations << " ns" << std::endl;
+
 
 			if(enableMipMapping) albedo = SampleTexture(selectedDiffuseTexture, selectedDimensions.x, selectedDimensions.y, interpolatedUVCoords, true);
 			else albedo = SampleTexture(baseDiffuseTexture, baseDimensions.x, baseDimensions.y, interpolatedUVCoords, true);
@@ -435,55 +451,171 @@ float2 Tmpl8::Renderer::InterpolateUV(float2 uv0, float2 uv1, float2 uv2, float3
 
 float3 Tmpl8::Renderer::SampleTexture(uint32_t* texture, int texWidth, int texHeight, float2 uv, bool tile)
 {
-    // Handle UV wrapping or clamping
-    if (tile) {
-        uv = float2(uv.x - floor(uv.x), uv.y - floor(uv.y)); // Wrap
-    }
-    else {
-        uv = float2(std::clamp(uv.x, 0.0f, 1.0f), std::clamp(uv.y, 0.0f, 1.0f)); // Clamp
-    }
+	// Wrap or clamp UV coordinates
+	if (tile) {
+		uv.x -= floorf(uv.x);
+		uv.y -= floorf(uv.y);
+	}
+	else {
+		uv.x = std::clamp(uv.x, 0.0f, 1.0f);
+		uv.y = std::clamp(uv.y, 0.0f, 1.0f);
+	}
 
-    // Scale UV coordinates to texel space
-    float x = uv.x * (texWidth - 1);
-    float y = uv.y * (texHeight - 1);
+	// Scale to texel space
+	float x = uv.x * (texWidth - 1);
+	float y = uv.y * (texHeight - 1);
 
-    // Compute integer texel positions
-    int x0 = static_cast<int>(x);
-    int y0 = static_cast<int>(y);
-    int x1 = std::min(x0 + 1, texWidth - 1);
-    int y1 = std::min(y0 + 1, texHeight - 1);
+	// Compute texel indices
+	int x0 = static_cast<int>(x);
+	int y0 = static_cast<int>(y);
+	int x1 = std::min(x0 + 1, texWidth - 1);
+	int y1 = std::min(y0 + 1, texHeight - 1);
 
-    // Compute interpolation factors
-    float dx = x - x0;
-    float dy = y - y0;
+	// Compute interpolation weights
+	float dx = x - x0;
+	float dy = y - y0;
 
-    // Fetch the four neighboring texels
-    uint32_t texel00 = texture[y0 * texWidth + x0];
-    uint32_t texel10 = texture[y0 * texWidth + x1];
-    uint32_t texel01 = texture[y1 * texWidth + x0];
-    uint32_t texel11 = texture[y1 * texWidth + x1];
+	// Load texel values as 32-bit integers (RGBA packed)
+	__m128i texel00 = _mm_cvtsi32_si128(texture[y0 * texWidth + x0]);
+	__m128i texel10 = _mm_cvtsi32_si128(texture[y0 * texWidth + x1]);
+	__m128i texel01 = _mm_cvtsi32_si128(texture[y1 * texWidth + x0]);
+	__m128i texel11 = _mm_cvtsi32_si128(texture[y1 * texWidth + x1]);
 
-    // Extract RGB components
-    auto UnpackColor = [](uint32_t texel) -> float3 {
-        return float3(
-            ((texel >> 16) & 0xFF) / 255.0f,
-            ((texel >> 8) & 0xFF) / 255.0f,
-            (texel & 0xFF) / 255.0f
-        );
-    };
+	// Convert from packed 8-bit (RGBA8888) to 32-bit integer channels
+	texel00 = _mm_cvtepu8_epi32(texel00);
+	texel10 = _mm_cvtepu8_epi32(texel10);
+	texel01 = _mm_cvtepu8_epi32(texel01);
+	texel11 = _mm_cvtepu8_epi32(texel11);
 
-    float3 T00 = UnpackColor(texel00);
-    float3 T10 = UnpackColor(texel10);
-    float3 T01 = UnpackColor(texel01);
-    float3 T11 = UnpackColor(texel11);
+	// Convert to float and normalize to [0, 1]
+	__m128 scale = _mm_set1_ps(1.0f / 255.0f);
+	__m128 c00 = _mm_mul_ps(_mm_cvtepi32_ps(texel00), scale);
+	__m128 c10 = _mm_mul_ps(_mm_cvtepi32_ps(texel10), scale);
+	__m128 c01 = _mm_mul_ps(_mm_cvtepi32_ps(texel01), scale);
+	__m128 c11 = _mm_mul_ps(_mm_cvtepi32_ps(texel11), scale);
 
-    // Bilinear interpolation
-    float3 L0 = (1.0f - dx) * T00 + dx * T10;
-    float3 L1 = (1.0f - dx) * T01 + dx * T11;
-    float3 finalColor = (1.0f - dy) * L0 + dy * L1;
+	// Bilinear interpolation weights
+	__m128 w00 = _mm_set1_ps((1.0f - dx) * (1.0f - dy));
+	__m128 w10 = _mm_set1_ps(dx * (1.0f - dy));
+	__m128 w01 = _mm_set1_ps((1.0f - dx) * dy);
+	__m128 w11 = _mm_set1_ps(dx * dy);
 
-    return finalColor;
+	// Compute bilinear interpolation
+	__m128 result = _mm_add_ps(
+		_mm_add_ps(_mm_mul_ps(c00, w00), _mm_mul_ps(c10, w10)),
+		_mm_add_ps(_mm_mul_ps(c01, w01), _mm_mul_ps(c11, w11))
+	);
 
+	// Extract RGB channels
+	float3 finalColor;
+	_mm_store_ss(&finalColor.x, result);
+	_mm_store_ss(&finalColor.y, _mm_shuffle_ps(result, result, _MM_SHUFFLE(0, 0, 0, 1)));
+	_mm_store_ss(&finalColor.z, _mm_shuffle_ps(result, result, _MM_SHUFFLE(0, 0, 0, 2)));
+
+	return finalColor;
+
+		
+
+	//float3 T00;
+	//T00.x = r4f.a[0];
+	//T00.y = g4f.a[0];
+	//T00.z = b4f.a[0];
+	//		  
+	//float3 T10;
+	//T10.x = r4f.a[1];
+	//T10.y = g4f.a[1];
+	//T10.z = b4f.a[1];
+
+	//float3 T01;
+	//T01.x = r4f.a[2];
+	//T01.y = g4f.a[2];
+	//T01.z = b4f.a[2];
+
+	//float3 T11;
+	//T11.x = r4f.a[3];
+	//T11.y = g4f.a[3];
+	//T11.z = b4f.a[3];
+
+
+ //   // Bilinear interpolation
+ // // Compute weights
+	//float w0 = 1.0f - dx;
+	//float w1 = dx;
+	//float h0 = 1.0f - dy;
+	//float h1 = dy;
+
+	//// Compute horizontal blendin
+
+
+	//float3 L0_left = w0 * T00;
+
+	//float3 L0_right = w1 * T10;
+	//float3 L0 = L0_left + L0_right;
+
+	//float3 L1_left = w0 * T01;
+	//float3 L1_right = w1 * T11;
+	//float3 L1 = L1_left + L1_right;
+
+	//float3 finalColor_bottom = h1 * L1;
+	//// Compute vertical blending
+	//float3 finalColor_top = h0 * L0;
+	//float3 finalColor = finalColor_top + finalColor_bottom;
+
+ //   return finalColor;
+
+
+	/// bilinear filtering non-vectorized
+
+	//// Handle UV wrapping or clamping
+	//if (tile) {
+	//	uv = float2(uv.x - floor(uv.x), uv.y - floor(uv.y)); // Wrap
+	//}
+	//else {
+	//	uv = float2(std::clamp(uv.x, 0.0f, 1.0f), std::clamp(uv.y, 0.0f, 1.0f)); // Clamp
+	//}
+
+	//// Scale UV coordinates to texel space
+	//float x = uv.x * (texWidth - 1);
+	//float y = uv.y * (texHeight - 1);
+
+	//// Compute integer texel positions
+	//int x0 = static_cast<int>(x);
+	//int y0 = static_cast<int>(y);
+	//int x1 = std::min(x0 + 1, texWidth - 1);
+	//int y1 = std::min(y0 + 1, texHeight - 1);
+
+	//// Compute interpolation factors
+	//float dx = x - x0;
+	//float dy = y - y0;
+
+	//// Fetch the four neighboring texels
+	//uint32_t texel00 = texture[y0 * texWidth + x0];
+	//uint32_t texel10 = texture[y0 * texWidth + x1];
+	//uint32_t texel01 = texture[y1 * texWidth + x0];
+	//uint32_t texel11 = texture[y1 * texWidth + x1];
+
+	//// Extract RGB components
+	//auto UnpackColor = [](uint32_t texel) -> float3 {
+	//	return float3(
+	//		((texel >> 16) & 0xFF) / 255.0f,
+	//		((texel >> 8) & 0xFF) / 255.0f,
+	//		(texel & 0xFF) / 255.0f
+	//	);
+	//	};
+
+	//float3 T00 = UnpackColor(texel00);
+	//float3 T10 = UnpackColor(texel10);
+	//float3 T01 = UnpackColor(texel01);
+	//float3 T11 = UnpackColor(texel11);
+
+	//// Bilinear interpolation
+	//float3 L0 = (1.0f - dx) * T00 + dx * T10;
+	//float3 L1 = (1.0f - dx) * T01 + dx * T11;
+	//float3 finalColor = (1.0f - dy) * L0 + dy * L1;
+
+	//return finalColor;
+
+	/// sampling og
 
 	//// Handle UV wrapping or clamping
 	//if (tile) {

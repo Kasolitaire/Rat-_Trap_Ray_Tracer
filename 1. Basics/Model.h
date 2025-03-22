@@ -9,12 +9,6 @@
 #include <iostream>
 #include <unordered_map>
 
-enum class TextureType 
-{
-	Diffuse,
-	Normal
-};
-
 struct Mip 
 {
 	float2 dimensions;
@@ -38,19 +32,11 @@ struct Vertex
 	unsigned int meshIndex;
 };
 
-struct TextureData
-{
-	//unsigned int id;
-	TextureType type;
-	std::string path;
-	int2 dimensions;
-};
 
 struct Mesh
 {
 	// maybe add mesh name
 	// maybe also add material
-	std::vector<TextureData> textures;
 
 	std::vector<Texture> diffuseTextures;
 	std::vector<Texture> normalTextures;

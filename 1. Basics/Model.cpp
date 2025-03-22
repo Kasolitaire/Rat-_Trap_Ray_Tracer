@@ -159,7 +159,7 @@ void Model::LoadTextureType(aiTextureType aiTextureType, aiMaterial* material, s
 			int mipWidth = std::max(1, surface.width >> level);
 			int mipHeight = std::max(1, surface.height >> level);
 
-			uint* mipPixels = new uint[mipWidth * mipHeight]; // Allocate storage
+			uint* mipPixels = static_cast<uint*>(_aligned_malloc(mipWidth * mipHeight * sizeof(uint), 16)); // Allocate storage
 			glGetTexImage(GL_TEXTURE_2D, level, GL_RGBA, GL_UNSIGNED_BYTE, mipPixels);
 
 			Mip mip;

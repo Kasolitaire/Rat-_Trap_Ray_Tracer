@@ -84,6 +84,13 @@ namespace tinybvh
 	using bvhvec4 = Tmpl8::float4;
 	using bvhdbl3 = Tmpl8::double3;
 }
+
+namespace Tmpl8
+{
+	union QuadInt { __m128i a4; int a[4]; };
+	union QuadFloat { __m128 a4; float a[4]; };
+}
+
 #define TINYBVH_USE_CUSTOM_VECTOR_TYPES 
 #include "tiny_bvh.h"
 
