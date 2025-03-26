@@ -40,6 +40,7 @@ struct Mesh
 
 	std::vector<Texture> diffuseTextures;
 	std::vector<Texture> normalTextures;
+	std::vector<Texture> MetallicRoughnessTextures;
 	// other types
 };
 

@@ -2,6 +2,7 @@
 #include "../lib/stb_image.h"
 #include <iostream>
 #include <chrono>
+
 using namespace chrono;
 
 // -----------------------------------------------------------
@@ -10,6 +11,7 @@ using namespace chrono;
 static bool enableNormalMaps = true;
 static bool enableMipMapping = true;
 static bool viewMipMapping = true;
+static bool enableMaterialPoints = true;
 
 void Renderer::Init()
 {
@@ -22,6 +24,12 @@ void Renderer::Init()
 	int bpp = 0;
 	skyPixels = stbi_loadf("../assets/sky_19.hdr", &skyWidth, &skyHeight, &skyBpp, 0);
 	for (int i = 0; i < skyWidth * skyHeight * 3; i++) skyPixels[i] = sqrtf(skyPixels[i]);
+
+	/*Surface hdrTexture = Surface("../assets/kloppenheim_06_puresky_4k.hdr");
+	skyWidth = hdrTexture.width;
+	skyHeight = hdrTexture.height;
+
+	uint* texturePixelsCopy = new uint[hdrTexture.width * hdrTexture.height];*/
 }
 
 // -----------------------------------------------------------
@@ -56,6 +64,7 @@ float3 Renderer::Trace( Ray& ray, unsigned int depth)
 		float v = bvh_ray.hit.v;
 		float w = 1.0f - u - v;
 
+
 		uint32_t index = bvh_ray.hit.prim;
 
 		Vertex vertex1 = model.m_vertices[index * 3];
@@ -80,7 +89,7 @@ float3 Renderer::Trace( Ray& ray, unsigned int depth)
 
 		float3 albedo = float3(1.f);
 		float3 mipSample = float3(0.f);
-
+		float3 metallicRoughnessSample = float3(1.f);
 		RayCone rayCone;
 		rayCone.pixelSpreadAngle = camera.pixelSpreadAngle();
 		rayCone.surfaceSpreadAngle = ComputeSurfaceSpreadAngle(bvh_ray.D, surfaceNormal);
@@ -105,17 +114,17 @@ float3 Renderer::Trace( Ray& ray, unsigned int depth)
 			uint* selectedDiffuseTexture = selectedMip.texture;
 			float2 selectedDimensions = selectedMip.dimensions;
 
-			using Clock = std::chrono::high_resolution_clock;
-			int iterations = 1000000; // 1 million calls
-			auto start = Clock::now();
-			float3 result = float3();
-			for (int i = 0; i < iterations; ++i) 
-			{
-				result = SampleTexture(selectedDiffuseTexture, selectedDimensions.x, selectedDimensions.y, interpolatedUVCoords, true);
-			}
-			auto end = Clock::now();
-			auto duration = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count();
-			std::cout << "Average execution time: " << duration / iterations << " ns" << std::endl;
+			//using Clock = std::chrono::high_resolution_clock;
+			//int iterations = 1000000; // 1 million calls
+			//auto start = Clock::now();
+			//float3 result = float3();
+			//for (int i = 0; i < iterations; ++i) 
+			//{
+			//	result = SampleTexture(selectedDiffuseTexture, selectedDimensions.x, selectedDimensions.y, interpolatedUVCoords, true);
+			//}
+			//auto end = Clock::now();
+			//auto duration = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count();
+			//std::cout << "Average execution time: " << duration / iterations << " ns" << std::endl;
 
 
 			if(enableMipMapping) albedo = SampleTexture(selectedDiffuseTexture, selectedDimensions.x, selectedDimensions.y, interpolatedUVCoords, true);
@@ -190,6 +199,25 @@ float3 Renderer::Trace( Ray& ray, unsigned int depth)
 				TBN[4] * N_tangent.x + TBN[5] * N_tangent.y + TBN[6] * N_tangent.z,
 				TBN[8] * N_tangent.x + TBN[9] * N_tangent.y + TBN[10] * N_tangent.z
 			));
+		}
+
+		if (mesh.MetallicRoughnessTextures.size() && enableMaterialPoints) 
+		{
+
+			uint* baseMetallicRoughnessTexture = mesh.normalTextures[0].mips[0].texture;
+			float2 baseDimensions = mesh.normalTextures[0].mips[0].dimensions;
+			int levels = mesh.normalTextures[0].mips.size();
+
+			float lambda = ComputeTextureLOD(bvh_ray.D, surfaceNormal, triangleLODConstant, rayCone, baseDimensions.x, baseDimensions.y, intersection, bvh_ray.O);
+			int mipLevel = int(clamp(int(floorf(lambda + 0.5f)), 0, levels - 1));  // Adding 0.5 for better rounding
+
+			Mip selectedMip = mesh.normalTextures[0].mips[mipLevel];
+
+			uint* selectedMetallicRoughnessTexture = selectedMip.texture;
+			float2 selectedDimensions = selectedMip.dimensions;
+			if (enableMipMapping) metallicRoughnessSample = SampleTexture(selectedMetallicRoughnessTexture, selectedDimensions.x, selectedDimensions.y, interpolatedUVCoords, true);
+			else metallicRoughnessSample = SampleTexture(baseMetallicRoughnessTexture, baseDimensions.x, baseDimensions.y, interpolatedUVCoords, true);
+
 		}
 
 		// Check if texture is available
@@ -313,7 +341,7 @@ float3 Renderer::Trace( Ray& ray, unsigned int depth)
 
 			if (scene.m_pointLights.enabled && scene.m_pointLights.positions.size())
 			{
-				finalColor += ComputePointLights(interpolatedNormal, intersection, albedo, -bvh_ray.D);
+				finalColor += ComputePointLights(interpolatedNormal, intersection, albedo, -bvh_ray.D, metallicRoughnessSample.z, metallicRoughnessSample.y);
 			}
 
 			if (scene.m_directionalLights.enabled && scene.m_directionalLights.directions.size())
@@ -331,7 +359,9 @@ float3 Renderer::Trace( Ray& ray, unsigned int depth)
 	}
 	else
 	{
+
 		return SampleSky(bvh_ray.D);
+		//return SampleTexture(skyPixels, skyWidth, skyHeight, GetSkyUV(bvh_ray.D), true);
 	}
 
 	//scene.FindNearest( ray );
@@ -350,29 +380,38 @@ float3 Renderer::Trace( Ray& ray, unsigned int depth)
 // -----------------------------------------------------------tyr 
 void Renderer::Tick( float deltaTime )
 {
+	//RenderObject& torus = scene.m_renderObjects.at("torus");
+	//float3 rotation = torus.GetRotation();
+	//float rotationSpeed = 0.001f;  // Control the rotation speed
+	//rotation.y += rotationSpeed * deltaTime;  // Apply deltaTime to make it frame rate independent
+	//torus.SetRotation(rotation);
+
 	// animation
 	//if (animating) scene.SetTime( anim_time += deltaTime * 0.002f );
 	// pixel loop
 	Timer t;
 	// lines are executed as OpenMP parallel tasks (disabled in DEBUG)
 
-
-
+	//if (MouseDown()) std::cout << "Mouse Down" << std::endl;
 	scene.Update();
-
+	
 #pragma omp parallel for schedule(dynamic)
 	for (int y = 0; y < SCRHEIGHT; y++)
 	{
+
 		// trace a primary ray for each pixel on the line
 		for (int x = 0; x < SCRWIDTH; x++)
 		{
+
 			Ray primaryRay(camera.GetPrimaryRay((float)x, (float)y));
+			if (mousePos.x == x && mousePos.y == y && m_rightMouseDown) DebugBreak();
 			float4 pixel = float4( Trace( primaryRay ), 0 );
 			// translate accumulator contents to rgb32 pixels
 			screen->pixels[x + y * SCRWIDTH] = RGBF32_to_RGB8( &pixel );
 			accumulator[x + y * SCRWIDTH] = pixel;
 		}
 	}
+	m_rightMouseDown = false;
 	// performance report - running average - ms, MRays/s
 	static float avg = 10, alpha = 1;
 	avg = (1 - alpha) * avg + alpha * t.elapsed() * 1000;
@@ -383,13 +422,11 @@ void Renderer::Tick( float deltaTime )
 	camera.HandleInput( deltaTime );
 }
 
-static float metallic = 0.1f;
-static float roughness = 0.2f;
 
-float3 Tmpl8::Renderer::ComputePointLights(const float3 normal, const float3 intersection, float3 albedo, float3 viewDirection)
+float3 Tmpl8::Renderer::ComputePointLights(const float3 normal, const float3 intersection, float3 albedo, float3 viewDirection, float metallic, float roughness)
 {
 	float3 finalColor = float3(0);
-	//albedo = float3(1, 0, 0);
+	//DebugBreak();//albedo = float3(1, 0, 0);
 
 	for (unsigned int index = 0; index < scene.m_pointLights.positions.size(); index++)
 	{
@@ -451,6 +488,8 @@ float2 Tmpl8::Renderer::InterpolateUV(float2 uv0, float2 uv1, float2 uv2, float3
 
 float3 Tmpl8::Renderer::SampleTexture(uint32_t* texture, int texWidth, int texHeight, float2 uv, bool tile)
 {
+
+
 	// Wrap or clamp UV coordinates
 	if (tile) {
 		uv.x -= floorf(uv.x);
@@ -461,9 +500,17 @@ float3 Tmpl8::Renderer::SampleTexture(uint32_t* texture, int texWidth, int texHe
 		uv.y = std::clamp(uv.y, 0.0f, 1.0f);
 	}
 
+	// **Extra Clamp to Ensure Valid Range**
+	uv.x = std::clamp(uv.x, 0.0f, 1.0f);
+	uv.y = std::clamp(uv.y, 0.0f, 1.0f);
+
 	// Scale to texel space
 	float x = uv.x * (texWidth - 1);
 	float y = uv.y * (texHeight - 1);
+
+	// **Clamp Again Before Indexing**
+	x = std::clamp(x, 0.0f, float(texWidth - 1));
+	y = std::clamp(y, 0.0f, float(texHeight - 1));
 
 	// Compute texel indices
 	int x0 = static_cast<int>(x);
@@ -471,9 +518,35 @@ float3 Tmpl8::Renderer::SampleTexture(uint32_t* texture, int texWidth, int texHe
 	int x1 = std::min(x0 + 1, texWidth - 1);
 	int y1 = std::min(y0 + 1, texHeight - 1);
 
+
 	// Compute interpolation weights
 	float dx = x - x0;
 	float dy = y - y0;
+
+	// Ensure texture dimensions are valid
+	if (texWidth <= 0 || texHeight <= 0) __debugbreak();
+
+	// Ensure UV coordinates are not NaN
+	if (std::isnan(uv.x) || std::isnan(uv.y)) __debugbreak();
+
+	// Ensure computed texel coordinates are within bounds
+	if (x0 < 0 || x0 >= texWidth || y0 < 0 || y0 >= texHeight ||
+		x1 < 0 || x1 >= texWidth || y1 < 0 || y1 >= texHeight) {
+		__debugbreak();
+	}
+
+	// Ensure interpolation weights are valid
+	if (std::isnan(dx) || std::isnan(dy)) __debugbreak();
+
+	// Wrap or clamp UV coordinates
+	if (tile) {
+		uv.x -= floorf(uv.x);
+		uv.y -= floorf(uv.y);
+	}
+	else {
+		uv.x = std::clamp(uv.x, 0.0f, 1.0f);
+		uv.y = std::clamp(uv.y, 0.0f, 1.0f);
+	}
 
 	// Load texel values as 32-bit integers (RGBA packed)
 	__m128i texel00 = _mm_cvtsi32_si128(texture[y0 * texWidth + x0]);
@@ -494,6 +567,13 @@ float3 Tmpl8::Renderer::SampleTexture(uint32_t* texture, int texWidth, int texHe
 	__m128 c01 = _mm_mul_ps(_mm_cvtepi32_ps(texel01), scale);
 	__m128 c11 = _mm_mul_ps(_mm_cvtepi32_ps(texel11), scale);
 
+	// **Explicitly Zero Out Alpha**
+	__m128 mask = _mm_castsi128_ps(_mm_set_epi32(0, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF));
+	c00 = _mm_and_ps(c00, mask);
+	c10 = _mm_and_ps(c10, mask);
+	c01 = _mm_and_ps(c01, mask);
+	c11 = _mm_and_ps(c11, mask);
+
 	// Bilinear interpolation weights
 	__m128 w00 = _mm_set1_ps((1.0f - dx) * (1.0f - dy));
 	__m128 w10 = _mm_set1_ps(dx * (1.0f - dy));
@@ -506,14 +586,12 @@ float3 Tmpl8::Renderer::SampleTexture(uint32_t* texture, int texWidth, int texHe
 		_mm_add_ps(_mm_mul_ps(c01, w01), _mm_mul_ps(c11, w11))
 	);
 
-	// Extract RGB channels
-	float3 finalColor;
-	_mm_store_ss(&finalColor.x, result);
-	_mm_store_ss(&finalColor.y, _mm_shuffle_ps(result, result, _MM_SHUFFLE(0, 0, 0, 1)));
-	_mm_store_ss(&finalColor.z, _mm_shuffle_ps(result, result, _MM_SHUFFLE(0, 0, 0, 2)));
+	// **Extract ONLY RGB from the final result**
+	alignas(16) float temp[4];  // Ensure memory is aligned for SIMD
+	_mm_storeu_ps(temp, result);
 
+	float3 finalColor = { temp[2], temp[1],temp[0] };  // Extract R, G, B
 	return finalColor;
-
 		
 
 	//float3 T00;
@@ -639,6 +717,75 @@ float3 Tmpl8::Renderer::SampleTexture(uint32_t* texture, int texWidth, int texHe
 	//float b = (texel & 0xFF) / 255.0f;
 
 	//return float3(r, g, b);
+}
+
+float3 Tmpl8::Renderer::SampleTexture(float* texture, int texWidth, int texHeight, float2 uv, bool tile)
+{
+	// Wrap or clamp UV coordinates
+	if (tile) {
+		uv.x -= floorf(uv.x);
+		uv.y -= floorf(uv.y);
+	}
+	else {
+		uv.x = std::clamp(uv.x, 0.0f, 1.0f);
+		uv.y = std::clamp(uv.y, 0.0f, 1.0f);
+	}
+
+	// Scale to texel space
+	float x = uv.x * (texWidth - 1);
+	float y = uv.y * (texHeight - 1);
+
+	// **Clamp Again Before Indexing**
+	x = std::clamp(x, 0.0f, float(texWidth - 1));
+	y = std::clamp(y, 0.0f, float(texHeight - 1));
+
+	// Compute texel indices
+	int x0 = static_cast<int>(x);
+	int y0 = static_cast<int>(y);
+	int x1 = std::min(x0 + 1, texWidth - 1);
+	int y1 = std::min(y0 + 1, texHeight - 1);
+
+	// **Debug Checks**
+	if (x0 < 0 || x0 >= texWidth || y0 < 0 || y0 >= texHeight ||
+		x1 < 0 || x1 >= texWidth || y1 < 0 || y1 >= texHeight) {
+		__debugbreak(); // If this triggers, inspect 'uv', 'x', 'y', 'texWidth', and 'texHeight'
+	}
+
+	// Load texel values as 32-bit floats (assuming a float4 layout in the HDR texture)
+	__m128 texel00 = _mm_load_ps(&texture[(y0 * texWidth + x0) * 4]);
+	__m128 texel10 = _mm_load_ps(&texture[(y0 * texWidth + x1) * 4]);
+	__m128 texel01 = _mm_load_ps(&texture[(y1 * texWidth + x0) * 4]);
+	__m128 texel11 = _mm_load_ps(&texture[(y1 * texWidth + x1) * 4]);
+
+	// Bilinear interpolation weights
+	float dx = x - x0;
+	float dy = y - y0;
+
+	__m128 w00 = _mm_set1_ps((1.0f - dx) * (1.0f - dy));
+	__m128 w10 = _mm_set1_ps(dx * (1.0f - dy));
+	__m128 w01 = _mm_set1_ps((1.0f - dx) * dy);
+	__m128 w11 = _mm_set1_ps(dx * dy);
+
+	// Compute bilinear interpolation
+	__m128 result = _mm_add_ps(
+		_mm_add_ps(_mm_mul_ps(texel00, w00), _mm_mul_ps(texel10, w10)),
+		_mm_add_ps(_mm_mul_ps(texel01, w01), _mm_mul_ps(texel11, w11))
+	);
+
+	// Extract the final RGB color
+	alignas(16) float temp[4];  // Ensure memory is aligned for SIMD
+	_mm_store_ps(temp, result);
+
+	float3 finalColor = { temp[0], temp[1], temp[2] };  // Extract R, G, B
+	return finalColor;
+}
+
+
+float2 Tmpl8::Renderer::GetSkyUV(const float3& direction)
+{
+	float u = atan2f(direction.z, direction.x) * INV2PI + 0.5f;
+	float v = acosf(direction.y) * INVPI;
+	return float2(u, v);
 }
 
 
@@ -815,6 +962,10 @@ void Renderer::UI()
 		//ImGui::SameLine();
 		//ImGui::Dummy(ImVec2(ImGui::GetContentRegionAvail().x - 100.0f, 0.0f)); // Adjust 100.0f for space
 		//ImGui::Text("Your Text Here");
+		ImGui::SameLine(ImGui::GetWindowWidth() - 200.0f); // Adjust position
+		ImVec2 mousePos = ImGui::GetMousePos();
+		ImGui::Text("Mouse: (%.0f, %.0f)", mousePos.x, mousePos.y);
+
 		ImGui::EndMainMenuBar();
 	}
 
@@ -896,14 +1047,17 @@ void Renderer::UI()
 		if (ImGui::Checkbox("enable normal maps", &enableNormalMaps))
 		{
 		}
+		if (ImGui::Checkbox("enable MaterialPoints", &enableMaterialPoints))
+		{
+		}
 		if (ImGui::Checkbox("enable MipMapping", &enableMipMapping))
 		{
 		}
 		if (ImGui::Checkbox("view MipMapping", &viewMipMapping))
 		{
 		}
-		ImGui::SliderFloat("metallic", &metallic, 0.0f, 1.0f);
-		ImGui::SliderFloat("roughness", &roughness, 0.0f, 1.0f);
+		/*ImGui::SliderFloat("metallic", &metallic, 0.0f, 1.0f);
+		ImGui::SliderFloat("roughness", &roughness, 0.0f, 1.0f);*/
 		ImGui::End();
 
 		// Create a checkbox
@@ -928,5 +1082,13 @@ void Tmpl8::Renderer::ImGuiCreateObjectPopout(std::string objectName, bool open)
 		}
 
 		ImGui::End();
+	}
+}
+
+void Tmpl8::Renderer::MouseDown(int button)
+{
+	if (button == GLFW_MOUSE_BUTTON_2)
+	{
+		m_rightMouseDown = true;
 	}
 }

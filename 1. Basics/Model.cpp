@@ -39,8 +39,7 @@ Model::Model(std::string path, std::string directory, std::string name, bool smo
 		LoadTextureType(aiTextureType_DIFFUSE, material, directory, meshData);
 		LoadTextureType(aiTextureType_HEIGHT, material, directory, meshData);
 		LoadTextureType(aiTextureType_NORMALS, material, directory, meshData);
-
-		
+		LoadTextureType(aiTextureType_DIFFUSE_ROUGHNESS, material, directory, meshData);	
 
 		for (unsigned int faceIndex = 0; faceIndex < mesh->mNumFaces; faceIndex++)
 		{
@@ -48,7 +47,6 @@ Model::Model(std::string path, std::string directory, std::string name, bool smo
 
 			for (unsigned int index = 0; index < face.mNumIndices; index++)
 			{
-
 				unsigned int currentIndice = face.mIndices[index];
 
 				Vertex vertex = {};
@@ -171,20 +169,26 @@ void Model::LoadTextureType(aiTextureType aiTextureType, aiMaterial* material, s
 		switch (aiTextureType)
 		{
 		case aiTextureType_DIFFUSE:
-			std::cout << "Diffuse texture path: " << aitexturePath.C_Str() << std::endl;
+			//std::cout << "Diffuse texture path: " << aitexturePath.C_Str() << std::endl;
 			meshData.diffuseTextures.push_back(texture);
 			break;
 		case aiTextureType_HEIGHT:
-			std::cout << "Height map texture path: " << aitexturePath.C_Str() << std::endl;
+			//std::cout << "Height map texture path: " << aitexturePath.C_Str() << std::endl;
 			meshData.normalTextures.push_back(texture);
 			break;
 		case aiTextureType_NORMALS:
-			std::cout << "Normal map texture path: " << aitexturePath.C_Str() << std::endl;
+			//std::cout << "Normal map texture path: " << aitexturePath.C_Str() << std::endl;
 			meshData.normalTextures.push_back(texture);
+			break;
+		case aiTextureType_DIFFUSE_ROUGHNESS:
+			//std::cout << "Unknown texture path: " << aitexturePath.C_Str() << std::endl;
+			meshData.MetallicRoughnessTextures.push_back(texture);
 			break;
 		default :
 			break;
 		}
+
+		
 
 		//if (!m_textures.count(texturePath))
 		//{

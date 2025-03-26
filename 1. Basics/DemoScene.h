@@ -45,6 +45,7 @@ public:
         LoadModel("Plane", true);
         LoadModel("DamagedHelmet", true);
         LoadModel("Floor");
+        LoadModel("torus", true);
         Material blueDiffuse;
         blueDiffuse.setAlbedo(float3(0.5f,0.5f,1.f));
 
@@ -62,7 +63,8 @@ public:
         RenderObject& floor = m_renderObjects.at("Floor");*/
         //floor.SetScale(float3(5.f, 5.f, 5.f));
         //CreateRenderObject("DamagedHelmet", "DamagedHelmet");
-        CreateRenderObject("Sphere", "Sphere");
+       CreateRenderObject("Sphere", "Sphere", reflective);
+        //CreateRenderObject("torus", "torus");
         CreateRenderObject("sponza", "Sponza");
         RenderObject& sponza = m_renderObjects.at("sponza");
         sponza.SetScale(float3(0.03f, 0.03f, 0.03f));
